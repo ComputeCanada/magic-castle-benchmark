@@ -1,0 +1,72 @@
+---
+magic_castle::site::all:
+  - profile::base
+  - profile::consul
+  - profile::freeipa
+  - profile::users::local
+  - profile::sssd::client
+  - profile::metrics::node_exporter
+  - profile::rsyslog::client
+  - swap_file
+  - profile::vector
+
+
+profile::vector::access_var_log: true
+profile::vector::config: |
+  sources:
+    puppet_agent_logs:
+      type: journald
+      data_dir: /var/lib/vector
+      include_units: ["puppet.service"]
+      since_now: True
+    cloud_init:
+      type: file
+      include:
+        - /var/log/cloud-init.log
+
+  transforms:
+    from_cloud_init:
+      type: remap
+      inputs: [cloud_init]
+      source: |-
+        .list = split!(.message, " - ")
+        .timestamp = parse_timestamp!(.list[0], format: "%F %H:%M:%S,%3f")
+        .message = .list[1]
+        .program = "cloud-init"
+
+    from_journald:
+      type: remap
+      inputs: [puppet_agent_logs]
+      source: |-
+        .program = .SYSLOG_IDENTIFIER
+
+    to_elastic_format:
+      type: remap
+      inputs: [from_journald, from_cloud_init]
+      source: |-
+        .elastic.message = .message
+        .elastic."@timestamp" = .timestamp
+        .elastic.run_id = "${RUN_ID}"
+        .elastic.program = .program
+        .elastic.host = parse_regex!(get_hostname!(), r'^([^.]*)\.', numeric_groups: true)."1"
+        . = .elastic
+
+  sinks:
+    output_elasticsearch:
+      type: elasticsearch
+      inputs:
+        - to_elastic_format
+      endpoints:
+        - "$OPENSEARCH_URL"
+      auth:
+        strategy: basic
+        user: "$OPENSEARCH_USERNAME"
+        password: "$OPENSEARCH_PASSWORD"
+      bulk:
+        index: "${OPENSEARCH_INDEX}"
+    output_console:
+      type: console
+      inputs: [to_elastic_format]
+      encoding:
+        codec: "json"
+

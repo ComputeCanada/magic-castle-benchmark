@@ -1,0 +1,54 @@
+name: Terraform Apply
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Midnight UTC. Must match with destroy
+
+env:
+  TF_CLOUD_ORGANIZATION: "${{ vars.TF_CLOUD_ORGANIZATION }}"
+  TF_API_TOKEN: "${{ secrets.TERRAFORM_CLOUD_TOKEN }}"
+  TF_WORKSPACE: "${{ vars.TF_WORKSPACE }}"
+  CONFIG_DIRECTORY: "./demo-infra"
+  OPENSEARCH_PASSWORD: "${{ secrets.OPENSEARCH_PASSWORD }}"
+  OPENSEARCH_USERNAME: "${{ vars.OPENSEARCH_USERNAME }}"
+  OPENSEARCH_URL: "${{ vars.OPENSEARCH_URL }}"
+  OPENSEARCH_INDEX: "${{ vars.OPENSEARCH_INDEX }}"
+  RUN_ID: "RUN_ID_${{ github.run_id }}"
+
+jobs:
+  terraform:
+    name: "Terraform Apply"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: envsubst
+        uses: danielr1996/envsubst-action@1.0.0
+        with:
+          input: "${{ env.CONFIG_DIRECTORY }}/hieradata.template.yaml"
+          output: "${{ env.CONFIG_DIRECTORY }}/hieradata.yaml"
+      - name: Upload Configuration
+        uses: hashicorp/tfc-workflows-github/actions/upload-configuration@v1.0.0
+        id: apply-upload
+        with:
+          workspace: ${{ env.TF_WORKSPACE }}
+          directory: ${{ env.CONFIG_DIRECTORY }}
+
+      - name: Create Apply Run
+        uses: hashicorp/tfc-workflows-github/actions/create-run@v1.0.0
+        id: apply-run
+        with:
+          workspace: ${{ env.TF_WORKSPACE }}
+          configuration_version: ${{ steps.apply-upload.outputs.configuration_version_id }}
+      - name: Apply
+        uses: ./.github/workflows/apply
+        if: fromJSON(steps.apply-run.outputs.payload).data.attributes.actions.IsConfirmable
+        id: apply
+        with:
+          run: ${{ steps.apply-run.outputs.run_id }}
+          comment: "Apply Run from GitHub Actions CI ${{ github.sha }}"
+      - name: Upload elasticsearch
+        if: fromJSON(steps.apply-run.outputs.payload).data.attributes.actions.IsConfirmable
+        run: ./scripts/push_elasticsearch.sh
