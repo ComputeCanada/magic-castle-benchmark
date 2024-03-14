@@ -1,9 +1,12 @@
 name: Terraform Apply
 
-# on:
-#   schedule:
-#     # Set the cron timing as per your requirement
-#     - cron: '0 0 * * *' # This will trigger the action at midnight UTC every day
+on:
+  push:
+    branches:
+      - never_run
+  # schedule:
+  #   # Set the cron timing as per your requirement
+  #   - cron: '0 0 * * *' # This will trigger the action at midnight UTC every day
 
 env:
   TF_CLOUD_ORGANIZATION: "${{ vars.TF_CLOUD_ORGANIZATION }}"
