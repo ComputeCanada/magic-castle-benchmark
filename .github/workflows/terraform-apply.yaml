@@ -1,9 +1,7 @@
 name: Terraform Apply
 
 on:
-  push:
-    branches:
-      - never_run
+  workflow_dispatch
   # schedule:
   #   # Set the cron timing as per your requirement
   #   - cron: '0 0 * * *' # This will trigger the action at midnight UTC every day
