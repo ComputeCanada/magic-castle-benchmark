@@ -36,6 +36,8 @@ module "openstack" {
     }
   }
 
+  hieradata = "---"
+
   public_keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL7dd00/9CXlTohQEgj5scMu1gOqrixPDVxF6Hrh67sD etiennedub"]
 
   nb_users = 10
