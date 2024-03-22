@@ -9,8 +9,8 @@ variable "pool" {
 
 module "openstack" {
   source         = "git::https://github.com/ComputeCanada/magic_castle.git//openstack"
-  config_git_url = "https://github.com/ComputeCanada/puppet-magic_castle.git"
-  config_version = "main"
+  config_git_url = "https://github.com/etiennedub/puppet-magic_castle.git"
+  config_version = "elasticsearch"
 
   cluster_name = "mcspeed"
   domain       = "calculquebec.cloud"
@@ -38,6 +38,8 @@ module "openstack" {
 
   public_keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL7dd00/9CXlTohQEgj5scMu1gOqrixPDVxF6Hrh67sD etiennedub"]
   generate_ssh_key = true
+
+  hieradata = file("./hieradata.yaml")
 
   nb_users = 10
   # Shared password, randomly chosen if blank

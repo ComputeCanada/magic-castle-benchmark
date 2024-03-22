@@ -1,0 +1,15 @@
+---
+magic_castle::site::tags:
+  mgmt:
+    - profile::rsyslog::elasticsearch
+profile::rsyslog::elasticsearch::server_url: "https://search-mcspeed-t26xonjbrzuuq5hpovg5xgdltm.ca-central-1.es.amazonaws.com"
+profile::rsyslog::elasticsearch::server_port: "443"
+profile::rsyslog::elasticsearch::index: "test_master"
+profile::rsyslog::elasticsearch::username: "action"
+profile::rsyslog::elasticsearch::password: $OPENSEARCH_PASSWORD
+profile::rsyslog::elasticsearch::program_names:
+  - "puppet-agent"
+  - "cloud-init"
+profile::rsyslog::elasticsearch::tags:
+  run_id: $RUN_ID
+
