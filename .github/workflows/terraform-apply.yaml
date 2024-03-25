@@ -45,7 +45,7 @@ jobs:
           run: ${{ steps.apply-run.outputs.run_id }}
           comment: "Apply Run from GitHub Actions CI ${{ github.sha }}"
       - name: Output
-        uses: .github/workflows/upload.yaml
+        uses: ./.github/actions/upload.yaml
         id: output
         with:
           run: ${{ steps.apply-run.outputs.run_id }}
