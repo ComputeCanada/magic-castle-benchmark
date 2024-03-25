@@ -53,5 +53,6 @@ jobs:
         with:
           run: ${{ steps.apply-run.outputs.run_id }}
 
-      - run: |
-             echo "${{ steps.output.outputs.payload }}" | jq .
+      - name: Save Payload to File
+        run: |
+          echo "${{ steps.output.outputs.payload }}" > payload.json
