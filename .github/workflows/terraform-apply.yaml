@@ -16,7 +16,6 @@ env:
 
 jobs:
   terraform:
-    if: github.repository != 'hashicorp-education/learn-terraform-github-actions'
     name: "Terraform Apply"
     runs-on: ubuntu-latest
     permissions:
@@ -55,4 +54,4 @@ jobs:
           run: ${{ steps.apply.outputs.run_id }}
 
       - run: |
-          echo "Latest Run Status: ${{ steps.output.outputs.payload }}"
+             echo "${{ steps.output.outputs.payload }}" | jq .
