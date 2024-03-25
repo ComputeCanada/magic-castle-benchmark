@@ -51,7 +51,7 @@ jobs:
         uses: hashicorp/tfc-workflows-github/actions/show-run@v1.2.0
         id: output
         with:
-          run: ${{ steps.apply.outputs.run_id }}
+          run: ${{ steps.apply-run.outputs.run_id }}
 
       - run: |
              echo "${{ steps.output.outputs.payload }}" | jq .
