@@ -39,7 +39,7 @@ module "openstack" {
   public_keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL7dd00/9CXlTohQEgj5scMu1gOqrixPDVxF6Hrh67sD etiennedub"]
   generate_ssh_key = true
 
-  hieradata = file("./hieradata.yaml")
+  # hieradata = file("./hieradata.yaml")
 
   nb_users = 10
   # Shared password, randomly chosen if blank
