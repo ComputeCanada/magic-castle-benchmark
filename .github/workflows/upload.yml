@@ -60,5 +60,3 @@ runs:
   - run
   - show
   - -run=${{ inputs.run }}
-  - |
-  - cat
