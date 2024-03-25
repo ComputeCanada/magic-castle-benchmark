@@ -47,12 +47,21 @@ jobs:
         with:
           run: ${{ steps.apply-run.outputs.run_id }}
           comment: "Apply Run from GitHub Actions CI ${{ github.sha }}"
-      - name: Output
-        uses: hashicorp/tfc-workflows-github/actions/show-run@v1.2.0
-        id: output
-        with:
-          run: ${{ steps.apply-run.outputs.run_id }}
-
-      - name: Save Payload to File
+      # - name: Output
+      #   uses: hashicorp/tfc-workflows-github/actions/show-run@v1.2.0
+      #   id: output
+      #   with:
+      #     run: ${{ steps.apply-run.outputs.run_id }}
+      - name: test
+        using: docker
+        image: 'docker://hashicorp/tfci:v1.2.0'
         run: |
-          echo "${{ steps.output.outputs.payload }}" > payload.json
+          tfci \
+          -hostname="app.terraform.io" \
+          -token=${{ env.TF_API_TOKEN  }} \
+          -organization=${{ env.TF_CLOUD_ORGANIZATION  }} \
+          run show -run=${{ steps.apply-run.outputs.run_id }}
+
+      # - name: Save Payload to File
+      #   run: |
+      #     echo "${{ steps.output.outputs.payload }}" > payload.json
