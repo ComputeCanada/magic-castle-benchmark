@@ -50,6 +50,6 @@ jobs:
         id: output
         with:
           run: ${{ steps.apply-run.outputs.run_id }}
-      - run: mkdir -p ${{ .env.SCRATCH }}
-      - run: echo hello > ${{ .env.SCRATCH }}/test.txt
-      - run: cat ${{ .env.SCRATCH }}/test.txt
+      - run: mkdir -p ${{ env.SCRATCH }}
+      - run: echo hello > ${{ env.SCRATCH }}/test.txt
+      - run: cat ${{ env.SCRATCH }}/test.txt
