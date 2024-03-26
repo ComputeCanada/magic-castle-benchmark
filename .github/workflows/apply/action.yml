@@ -50,4 +50,7 @@ runs:
   - run
   - apply
   - -run=${{ inputs.run }}
-  - -comment=${{ inputs.comment }} > /tmp/output.txt
+  - -comment=${{ inputs.comment }} > /SCRATCH/output.txt
+permissions:
+  paths:
+    - /SCRATCH # This path cannot be set dynamically
