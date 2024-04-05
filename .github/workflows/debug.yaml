@@ -1,0 +1,28 @@
+name: Terraform Apply
+
+on: push
+# schedule:
+#   # Set the cron timing as per your requirement
+#   - cron: '0 0 * * *' # This will trigger the action at midnight UTC every day
+
+env:
+  TF_CLOUD_ORGANIZATION: "${{ vars.TF_CLOUD_ORGANIZATION }}"
+  TF_API_TOKEN: "${{ secrets.TERRAFORM_CLOUD_TOKEN }}"
+  TF_WORKSPACE: "${{ vars.TF_WORKSPACE }}"
+  CONFIG_DIRECTORY: "./demo-infra"
+  SCRATCH: "/SCRATCH"
+
+jobs:
+  terraform:
+    name: "Terraform Apply"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Apply
+        uses: ./.github/workflows/apply
+        id: apply
+        with:
+          run: "none"
+          comment: "Apply Run from GitHub Actions CI ${{ github.sha }}"
+      - run: cat ${{ env.SCRATCH }}/output.txt
