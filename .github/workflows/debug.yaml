@@ -27,4 +27,4 @@ jobs:
         with:
           run: "none"
           comment: "Apply Run from GitHub Actions CI ${{ github.sha }}"
-      - run: cat ${{ env.SCRATCH }}/output.txt
+      - run: ls && pwd

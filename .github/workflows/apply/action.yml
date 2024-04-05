@@ -41,10 +41,9 @@ runs:
   using: docker
   image: 'docker://hashicorp/tfci:v1.2.0'
   args:
-  - tfci
-  - --help
-  - >
-  - /SCRATCH/output.txt
+  - ls
+  - &&
+  - pwd
 permissions:
   paths:
     - /SCRATCH # This path cannot be set dynamically. It must match with the others step in the main workflow
