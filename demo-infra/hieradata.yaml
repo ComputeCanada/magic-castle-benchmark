@@ -2,14 +2,37 @@
 magic_castle::site::tags:
   mgmt:
     - profile::rsyslog::elasticsearch
-profile::rsyslog::elasticsearch::server_url: "https://search-mcspeed-t26xonjbrzuuq5hpovg5xgdltm.ca-central-1.es.amazonaws.com"
+profile::rsyslog::elasticsearch::server_url: "$OPENSEARCH_URL"
 profile::rsyslog::elasticsearch::server_port: "443"
 profile::rsyslog::elasticsearch::index: "test_master"
-profile::rsyslog::elasticsearch::username: "action"
-profile::rsyslog::elasticsearch::password: $OPENSEARCH_PASSWORD
+profile::rsyslog::elasticsearch::username: "$OPENSEARCH_USERNAME"
+profile::rsyslog::elasticsearch::password: "$OPENSEARCH_PASSWORD"
 profile::rsyslog::elasticsearch::program_names:
   - "puppet-agent"
   - "cloud-init"
-profile::rsyslog::elasticsearch::tags:
-  run_id: $RUN_ID
+
+profile::rsyslog::elasticsearch::template: |
+  constant(value="{")
+  constant(value="\"@timestamp\":\"")
+  property(name="timereported" dateFormat="rfc3339")
+  constant(value="\",\"host\":\"")
+  property(name="hostname")
+  constant(value="\",\"program\":\"")
+  property(name="programname")
+  constant(value="\",\"severity\":\"")
+  property(name="syslogseverity-text")
+  constant(value="\",\"facility\":\"")
+  property(name="syslogfacility-text")
+  constant(value="\",\"syslogtag\":\"")
+  property(name="syslogtag")
+  constant(value="\",\"message\":\"")
+  property(name="msg" format="json")
+  constant(value="\",\"run_id\":\"$RUN_ID")
+  # Convert the timestamp format from cloud-init
+  constant(value="\",\"parsed_timestamp\":\"")
+  property(name="msg" dateFormat="rfc3339" regex.type="ERE" regex.expression="([^ ]+) " regex.submatch="1")
+  constant(value="T")
+  property(name="msg" dateFormat="rfc3339" regex.type="ERE" regex.expression="[^ ]+ ([^ ]+) " regex.submatch="1")
+  constant(value="Z")
+  constant(value="\"}")
 
