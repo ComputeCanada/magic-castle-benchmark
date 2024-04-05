@@ -43,6 +43,8 @@ runs:
   args:
   - tfci
   - --help
+  - >
+  - /SCRATCH/output.txt
 permissions:
   paths:
     - /SCRATCH # This path cannot be set dynamically. It must match with the others step in the main workflow
