@@ -18,8 +18,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    outputs:
-      terraform_log: ${{ steps.output.outputs.payload }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -41,7 +39,7 @@ jobs:
       # - run: mkdir -p ${{ env.SCRATCH }}
       - name: Apply
         uses: ./.github/workflows/apply
-        if: fromJSON(steps.apply-run.outputs.payload).data.attributes.actions.IsConfirmable
+        # if: fromJSON(steps.apply-run.outputs.payload).data.attributes.actions.IsConfirmable
         id: apply
         with:
           run: ${{ steps.apply-run.outputs.run_id }}
