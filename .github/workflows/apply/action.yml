@@ -41,7 +41,10 @@ runs:
   using: docker
   image: 'docker://hashicorp/tfci:v1.2.0'
   args:
-  - ls
+  - echo
+  - test
+  - >
+  - here.txt
 permissions:
   paths:
     - /SCRATCH # This path cannot be set dynamically. It must match with the others step in the main workflow
