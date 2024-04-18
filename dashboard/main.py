@@ -11,6 +11,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 INDEX = "mcspeed"
+MAX_HOST_NB = 20
 
 PUPPET_DURATION_REGEX = r'\d+(\.\d+)?'
 
@@ -28,61 +29,125 @@ def connect_to_opensearch(username, password, host, port):
         st.error("Error connecting to OpenSearch. Please check your credentials and try again.")
         return None
 
-def search_cloudinit(es, index, run_id):
+def search_start_end(es, index, run_id, program):
     try:
-        # TODO: There is some issue with rsyslog and enforcing a proper mapping.
-        # Once run_id is a keyword type and parsed_timestamp is a date type, we won't
-        # need to iterate on all messages.
-        # This is a simple workaround where we iterate in over all value to find the range.
         body = {
-            "size": 10000,
-            "query": {
-                "bool": {
-                    "must": [
-                        {"match": {"run_id": run_id}},
-                        {"match": {"program": "cloud-init"}},
-                    ],
-                }
+          "size": 0,
+          "query": {
+            "bool": {
+              "must": [
+                {"match": {"run_id": run_id}},
+                {"match": {"program": program}}
+              ]
             }
+          },
+          "aggs": {
+            "hosts": {
+              "terms": {
+                "field": "host",
+                "size": MAX_HOST_NB
+              },
+              "aggs": {
+                "max_timestamp": {
+                  "max": {
+                    "field": "@timestamp"
+                  }
+                },
+                "min_timestamp": {
+                  "min": {
+                    "field": "@timestamp"
+                  }
+                }
+              }
+            },
+            "missing_host": {
+              "missing": {
+                "field": "host"
+              },
+              "aggs": {
+                "max_timestamp": {
+                  "max": {
+                    "field": "@timestamp"
+                  }
+                },
+                "min_timestamp": {
+                  "min": {
+                    "field": "@timestamp"
+                  }
+                }
+              }
+            }
+          }
         }
 
-        res = es.search(index=f"{index}_rsyslog", body=body)
+        res = es.search(index=f"{index}", body=body)
         entries = []
-        for entry in res['hits']['hits']:
-            timestamp = pd.to_datetime(entry['_source']['parsed_timestamp'])
-            host = entry['_source']['host']
-            entries.append({"host": host, "timestamp": timestamp})
+
+        aggregations = res['aggregations']
+        missing_host = aggregations['missing_host']
+        if missing_host['doc_count'] != 0:
+            start = pd.to_datetime(missing_host['min_timestamp']['value_as_string'])
+            end = pd.to_datetime(missing_host['max_timestamp']['value_as_string'])
+            host = None
+            entries.append({"host": host, "start": start, "end": end })
+
+        for entry in aggregations['hosts']['buckets']:
+            start = pd.to_datetime(entry['min_timestamp']['value_as_string'])
+            end = pd.to_datetime(entry['max_timestamp']['value_as_string'])
+            host = entry['key']
+            entries.append({"host": host, "start": start, "end": end })
 
         df = pd.DataFrame(entries)
-        df_start = df.loc[df.groupby("host")['timestamp'].idxmin()]
-        df_end = df.loc[df.groupby("host")['timestamp'].idxmax()]
-        merged_df = pd.merge(df_start, df_end, on='host', suffixes=('_start', '_end'))
-        merged_df = merged_df.rename(columns={'timestamp_start': 'start', 'timestamp_end': 'end'})
-        return merged_df
+        return df
+
     except Exception as e:
-        logger.error(f"Error searching cloud-init logs: {e}")
-        st.error("Error searching cloud-init logs. Please try again.")
+        logger.error(f"Error searching {program} logs: {e}")
+        st.error(f"Error searching {program} logs. Please try again.")
         return pd.DataFrame()
 
 def search_puppet(es, index, run_id):
     try:
         body = {
-            "size": 100,
-            "query": {
-                "bool": {
-                    "must": [
-                        {"match": {"run_id": run_id}},
-                        {"match": {"program": "puppet-agent"}},
-                        {"match_phrase": {"message": "Applied catalog"}}
-                    ],
-                }
-            }
+      "size": 0,
+      "query": {
+        "bool": {
+          "must": [
+            {"match": {"run_id": run_id}},
+            {"match": {"program": "puppet-agent"}},
+          ]
         }
+      },
+      "aggs": {
+        "hosts": {
+          "terms": {
+            "field": "host",
+            "size": 10
+          },
+          "aggs": {
+            "first_applied_message": {
+              "filter": {
+                "match": {
+                  "message": "Applied"
+                }
+              },
+              "aggs": {
+                "first_message": {
+                  "top_hits": {
+                    "size": 1,
+                    "sort": [{ "@timestamp": "asc" }]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
 
         res = es.search(index=f"{index}_rsyslog", body=body)
         entries = []
-        for entry in res['hits']['hits']:
-            source = entry['_source']
+        for entry in res['aggregations']['hosts']['buckets']:
+            source = entry['first_applied_message']['first_message']['hits']['hits'][0]['_source']
             message = source['message']
             host = source['host']
             match = re.search(PUPPET_DURATION_REGEX, message)
@@ -94,45 +159,11 @@ def search_puppet(es, index, run_id):
                 entries.append({"host": host, "start": start, "end": end})
 
         df = pd.DataFrame(entries)
-        df = df.loc[df.groupby("host")['start'].idxmin()]
         return df
     except Exception as e:
         logger.error(f"Error searching puppet logs: {e}")
         st.error("Error searching puppet logs. Please try again.")
         return pd.DataFrame()
-
-def search_terraform(es, index, run_id, message, type_):
-    try:
-        body = {
-            "query": {
-                "bool": {
-                    "must": [
-                        {"match": {"run_id": run_id}},
-                        {"match": {"program": "terraform"}},
-                        {"match": {"type": type_}}
-                    ],
-                    "filter": {"match": {"@message": message}}
-                }
-            },
-            "_source": ["@timestamp"]
-        }
-
-        res = es.search(index=index, body=body)
-        return res
-    except Exception as e:
-        logger.error(f"Error searching Terraform logs: {e}")
-        return None
-
-def get_terraform_timestamp(es, index, run_id):
-    try:
-        res = search_terraform(es, index, run_id, "Apply complete", "change_summary")
-        end = res['hits']['hits'][0]['_source']['@timestamp']
-        res = search_terraform(es, index, run_id, "Terraform", "version")
-        start = res['hits']['hits'][0]['_source']['@timestamp']
-        return pd.to_datetime(start), pd.to_datetime(end)
-    except Exception as e:
-        logger.error(f"Error getting Terraform timestamps: {e}")
-        return None, None
 
 def list_unique_values(es, index, key):
     try:
@@ -144,6 +175,30 @@ def list_unique_values(es, index, key):
         logger.error(f"Error listing unique values: {e}")
         return []
 
+def get_single_run(es, index, run_id):
+    terraform_df = search_start_end(es, f"{index}", run_id, "terraform")
+    terraform_df['program'] = "terraform"
+    terraform_df['host'] = "terraform"
+    cloudinit_df = search_start_end(es, f"{index}_rsyslog", run_id, "cloud-init")
+    cloudinit_df['program'] = "cloudinit"
+    puppet_df = search_puppet(es, INDEX, run_id)
+    puppet_df['program'] = "puppet"
+
+    df = pd.concat([terraform_df, puppet_df, cloudinit_df], ignore_index=True)
+    df['run_id'] = run_id
+    return df
+
+def get_all_run(es, index, run_ids):
+    dfs = []
+    for run_id in run_ids:
+        dfs.append(get_single_run(es, index, run_id))
+    df = pd.concat(dfs)
+
+    df['duration_s'] = (df['end'] - df['start']).dt.total_seconds()
+    # total_duration = df.groupby('run_id')['end'].max() -  df.groupby('run_id')['start'].min()
+    # breakpoint()
+    return df
+
 def main():
     st.title("MCSpeed Dashboard")
 
@@ -151,7 +206,7 @@ def main():
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
         host = st.text_input("Host")
-        port = st.number_input("Port", value=9200)
+        port = st.number_input("Port", value=443)
 
         if st.button("Connect"):
             es = connect_to_opensearch(username, password, host, port)
@@ -162,19 +217,17 @@ def main():
     es = st.session_state.get("es")
     if es:
         run_ids = list_unique_values(es, INDEX, "run_id")
+        df = get_all_run(es, INDEX, run_ids)
+        program_duration = df.groupby(['run_id', 'program'])['duration_s'].max().reset_index()
+        fig = px.bar(program_duration, x='run_id', y='duration_s', color='program', barmode='stack')
+        st.plotly_chart(fig)
+
         run_id = st.selectbox("Run IDs", run_ids, index=None)
         if run_id:
-            terraform_start, terraform_end = get_terraform_timestamp(es, INDEX, run_id)
-            if terraform_start and terraform_end:
-                terraform_df = pd.DataFrame([{"host": "terraform", "program": "terraform", "start": terraform_start, "end": terraform_end}])
-                cloudinit_df = search_cloudinit(es, INDEX, run_id)
-                cloudinit_df['program'] = "cloudinit"
-                puppet_df = search_puppet(es, INDEX, run_id)
-                puppet_df['program'] = "puppet"
+            df_single = df[df['run_id'] == run_id]
 
-                df = pd.concat([terraform_df, puppet_df, cloudinit_df], ignore_index=True)
-
-                fig = px.timeline(df, x_start="start", x_end="end", y="host", color="program")
+            if not df_single.empty:
+                fig = px.timeline(df_single, x_start="start", x_end="end", y="host", color="program")
                 fig.update_yaxes(autorange="reversed")
                 st.plotly_chart(fig)
 
