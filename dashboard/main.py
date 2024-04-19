@@ -144,7 +144,7 @@ def search_puppet(es, index, run_id):
       }
     }
 
-        res = es.search(index=f"{index}_rsyslog", body=body)
+        res = es.search(index=f"{index}", body=body)
         entries = []
         for entry in res['aggregations']['hosts']['buckets']:
             source = entry['first_applied_message']['first_message']['hits']['hits'][0]['_source']
@@ -179,7 +179,7 @@ def get_single_run(es, index, run_id):
     terraform_df = search_start_end(es, f"{index}", run_id, "terraform")
     terraform_df['program'] = "terraform"
     terraform_df['host'] = "terraform"
-    cloudinit_df = search_start_end(es, f"{index}_rsyslog", run_id, "cloud-init")
+    cloudinit_df = search_start_end(es, f"{index}", run_id, "cloud-init")
     cloudinit_df['program'] = "cloudinit"
     puppet_df = search_puppet(es, INDEX, run_id)
     puppet_df['program'] = "puppet"
