@@ -3,6 +3,7 @@ name: Terraform Apply
 on:
   schedule:
     - cron: '0 0 * * *' # Midnight UTC. Must match with destroy
+    - cron: '0 6 * * *'
 
 env:
   TF_CLOUD_ORGANIZATION: "${{ vars.TF_CLOUD_ORGANIZATION }}"
