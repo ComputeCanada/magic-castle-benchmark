@@ -1,0 +1,46 @@
+# Original Action: https://raw.githubusercontent.com/hashicorp/tfc-workflows-github/main/actions/apply-run/action.yml
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: MPL-2.0
+
+name: 'TFC - Apply Run'
+description: "Applies a run that is paused waiting for confirmation after a plan."
+
+inputs:
+  # global flags
+  hostname:
+    required: false
+    description: "The hostname of a Terraform Enterprise installation, if using Terraform Enterprise. Defaults to Terraform Cloud (app.terraform.io) if `TF_HOSTNAME` environment variable is not set."
+    default: ""
+  token:
+    required: false
+    description: "The token used to authenticate with Terraform Cloud. Defaults to reading `TF_API_TOKEN` environment variable."
+    default: ""
+  organization:
+    required: false
+    description: "The name of the organization in Terraform Cloud. Defaults to reading `TF_CLOUD_ORGANIZATION` environment variable."
+    default: ""
+  # required
+  run:
+    required: true
+    description: "The run ID to apply."
+  # optional
+  comment:
+    required: false
+    description: "An optional comment about the run."
+    default: ""
+
+outputs:
+  status:
+    description: "The result of the operation. Possible values are `Success`, `Error`, `Timeout` or `Noop`."
+  run_id:
+    description: "The provided run ID."
+  run_status:
+    description: "The current status of the Terraform Cloud run."
+
+runs:
+  using: docker
+  image: 'docker://hashicorp/tfci:v1.2.0'
+  args:
+  - /bin/sh
+  - -c
+  - "tfci -hostname=${{ inputs.hostname }} -token=${{ inputs.token }} -organization=${{ inputs.organization }} run apply -run=${{ inputs.run }} -comment=${{ inputs.comment }} > output.txt"
