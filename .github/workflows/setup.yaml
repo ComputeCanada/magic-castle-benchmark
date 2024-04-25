@@ -1,0 +1,19 @@
+name: "Setup"
+
+on:
+  workflow_call:
+    outputs:
+      workspaces:
+        description: "List of workspaces"
+        value: ${{ jobs.list-workspaces.outputs.workspaces }}
+
+jobs:
+  # Source: https://code.dblock.org/2021/09/03/generating-task-matrix-by-looping-over-repo-files-with-github-actions.html
+  list-workspaces:
+    runs-on: ubuntu-latest
+    outputs:
+      workspaces: ${{ steps.set-matrix.outputs.workspaces }}
+    steps:
+      - uses: actions/checkout@v3
+      - id: set-matrix
+        run: echo "workspaces=$(ls workspace/*/ -d | cut -f2 -d'/' | jq -R -s -c 'split("\n")[:-1]')" >> $GITHUB_OUTPUT

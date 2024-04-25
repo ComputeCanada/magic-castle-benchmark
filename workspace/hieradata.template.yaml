@@ -47,6 +47,7 @@ profile::vector::config: |
         .elastic.message = .message
         .elastic."@timestamp" = .timestamp
         .elastic.run_id = "${RUN_ID}"
+        .elastic.workspace = "${TF_WORKSPACE}"
         .elastic.program = .program
         .elastic.host = parse_regex!(get_hostname!(), r'^([^.]*)\.', numeric_groups: true)."1"
         . = .elastic

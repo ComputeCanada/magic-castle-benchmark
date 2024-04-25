@@ -11,6 +11,7 @@ curl -X PUT -u "${OPENSEARCH_USERNAME}:${OPENSEARCH_PASSWORD}" "${OPENSEARCH_URL
   "mappings": {
     "properties":{
       "run_id":{ "type": "keyword" },
+      "workspace":{ "type": "keyword" },
       "program":{ "type": "keyword" },
       "host":{ "type": "keyword" }
     }
@@ -20,4 +21,4 @@ curl -X PUT -u "${OPENSEARCH_USERNAME}:${OPENSEARCH_PASSWORD}" "${OPENSEARCH_URL
 
 while IFS= read -r line; do
     curl -X POST -u "${OPENSEARCH_USERNAME}:${OPENSEARCH_PASSWORD}" "${OPENSEARCH_URL}/${OPENSEARCH_INDEX}/_doc" -H 'Content-Type: application/json' -d "${line}"
-done < <(jq -c "del(.hook) | del(.outputs) | . + { \"run_id\": \"${RUN_ID}\", \"program\":\"terraform\" }" /tmp/log)
+done < <(jq -c "del(.hook) | del(.outputs) | . + { \"run_id\": \"${RUN_ID}\", \"workspace\": \"${TF_WORKSPACE}\", \"program\":\"terraform\" }" /tmp/log)
