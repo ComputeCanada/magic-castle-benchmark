@@ -2,24 +2,28 @@ name: "Terraform Plan"
 
 on:
   push:
-    branches:
-      - demo
 
 env:
   TF_CLOUD_ORGANIZATION: "${{ vars.TF_CLOUD_ORGANIZATION }}"
   TF_API_TOKEN: "${{ secrets.TERRAFORM_CLOUD_TOKEN }}"
-  TF_WORKSPACE: "${{ vars.TF_WORKSPACE }}"
-  CONFIG_DIRECTORY: "./demo-infra"
   OPENSEARCH_PASSWORD: "${{ secrets.OPENSEARCH_PASSWORD }}"
   OPENSEARCH_USERNAME: "${{ vars.OPENSEARCH_USERNAME }}"
   OPENSEARCH_URL: "${{ vars.OPENSEARCH_URL }}"
   OPENSEARCH_INDEX: "${{ vars.OPENSEARCH_INDEX }}"
-  RUN_ID: "RUN_ID_${{ github.run_id }}"
 
 jobs:
+  setup:
+    uses: ./.github/workflows/setup.yaml
   terraform:
-    if: github.repository != 'hashicorp-education/learn-terraform-github-actions'
     name: "Terraform Plan"
+    needs: setup
+    strategy:
+      matrix:
+        workspace: ${{ fromJson(needs.setup.outputs.workspaces) }}
+    env:
+      TF_WORKSPACE: "${{ matrix.workspace }}"
+      CONFIG_DIRECTORY: "./workspace/${{  matrix.workspace }}"
+      RUN_ID: "${{ github.run_id }}_${{ matrix.workspace }}"
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -31,7 +35,7 @@ jobs:
       - name: envsubst
         uses: danielr1996/envsubst-action@1.0.0
         with:
-          input: "${{ env.CONFIG_DIRECTORY }}/hieradata.template.yaml"
+          input: "${{ env.CONFIG_DIRECTORY }}/../hieradata.template.yaml"
           output: "${{ env.CONFIG_DIRECTORY }}/hieradata.yaml"
       - name: Upload Configuration
         uses: hashicorp/tfc-workflows-github/actions/upload-configuration@v1.0.0
