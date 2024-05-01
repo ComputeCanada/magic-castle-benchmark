@@ -20,6 +20,7 @@ jobs:
     name: "Terraform Apply"
     needs: setup
     strategy:
+      fail-fast: false
       matrix:
         workspace: ${{ fromJson(needs.setup.outputs.workspaces) }}
     env:
