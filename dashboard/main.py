@@ -279,7 +279,9 @@ def main():
                 "start": "Date",
                 "duration_s": "Run duration (s)",
                 "program": "Program"
-             },)
+             },
+             hover_data=['run_id'],
+        )
         fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1].title()))
         st.plotly_chart(fig)
 
