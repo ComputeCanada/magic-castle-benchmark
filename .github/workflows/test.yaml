@@ -10,7 +10,7 @@ jobs:
         uses: actions/checkout@v3
       - name: Set delay time
         id: delay
-        run: echo "time=$(date -u +"%Y-%m-%dT%H:%M:%SZ" -d "+1 hour")"
+        run: echo "time=$(date -u +"%Y-%m-%dT%H:%M:%SZ" -d "+1 minute")"
 
       - name: Run delayed job
         if: github.event_name == 'schedule' && github.event.schedule == 'cron'
