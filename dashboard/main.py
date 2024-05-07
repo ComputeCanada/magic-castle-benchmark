@@ -69,7 +69,15 @@ def search_start_end(es, index, run_id, program):
             "bool": {
               "must": [
                 {"match": {"run_id": run_id}},
-                {"match": {"program": program}}
+                {"match": {"program": program}},
+                {
+                  "range": {
+                    "@timestamp": {
+                      "gte": "now/y",
+                      "lt": "now+1y/y"
+                    }
+                  }
+                },
               ]
             }
           },
@@ -92,7 +100,7 @@ def search_start_end(es, index, run_id, program):
                 }
               }
             },
-            "missing_host": {
+            "missing_host": { # In Terraform case, there is no host
               "missing": {
                 "field": "host"
               },
@@ -285,8 +293,12 @@ def main():
         fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1].title()))
         st.plotly_chart(fig)
 
-        run_id = st.selectbox("Run IDs", df['run_id'].unique(), index=None)
-        if run_id:
+        # run_id = st.selectbox("Run IDs", df['run_id'].unique(), index=None)
+        run_ids = st.multiselect(
+            'Run IDs', df['run_id'].unique(),
+            format_func=lambda x : f"{x}",
+            default=None)
+        for run_id in run_ids:
             df_single = df[df['run_id'] == run_id]
 
             if not df_single.empty:
@@ -294,6 +306,7 @@ def main():
                      category_orders={'program': ['terraform', 'cloudinit', 'puppet']})
 
                 fig.update_yaxes(autorange="reversed")
+                fig.update_layout(title=run_id)
                 st.plotly_chart(fig)
 
 if __name__ == "__main__":
