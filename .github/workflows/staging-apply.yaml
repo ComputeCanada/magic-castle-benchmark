@@ -1,0 +1,13 @@
+name: Terraform Apply Staging
+
+on:
+  push:
+    tags:
+      - apply
+
+jobs:
+  apply-staging:
+    uses: ./.github/workflows/terraform-apply.yaml
+    with:
+      opensearch_index: "staging"
+    secrets: inherit
