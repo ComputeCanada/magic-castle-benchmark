@@ -1,9 +1,7 @@
 name: Terraform Destroy
 
 on:
-  schedule:
-    - cron: '0 1 * * *' # Must match with apply +1h
-    - cron: '0 7 * * *' # Must match with apply +1h
+  workflow_call:
 
 env:
   TF_CLOUD_ORGANIZATION: "${{ vars.TF_CLOUD_ORGANIZATION }}"

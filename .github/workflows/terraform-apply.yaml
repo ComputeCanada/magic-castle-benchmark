@@ -1,9 +1,12 @@
 name: Terraform Apply
 
 on:
-  schedule:
-    - cron: '0 0 * * *' # Midnight UTC. Must match with destroy
-    - cron: '0 6 * * *'
+  workflow_call:
+    inputs:
+      opensearch_index:
+        type: string
+        default: "${{ vars.OPENSEARCH_INDEX }}"
+        required: false
 
 env:
   TF_CLOUD_ORGANIZATION: "${{ vars.TF_CLOUD_ORGANIZATION }}"
@@ -11,7 +14,7 @@ env:
   OPENSEARCH_PASSWORD: "${{ secrets.OPENSEARCH_PASSWORD }}"
   OPENSEARCH_USERNAME: "${{ vars.OPENSEARCH_USERNAME }}"
   OPENSEARCH_URL: "${{ vars.OPENSEARCH_URL }}"
-  OPENSEARCH_INDEX: "${{ vars.OPENSEARCH_INDEX }}"
+  OPENSEARCH_INDEX: "${{ inputs.opensearch_index }}"
 
 jobs:
   setup:

@@ -1,7 +1,7 @@
 name: "Terraform Plan"
 
 on:
-  push:
+  pull_request:
 
 env:
   TF_CLOUD_ORGANIZATION: "${{ vars.TF_CLOUD_ORGANIZATION }}"
