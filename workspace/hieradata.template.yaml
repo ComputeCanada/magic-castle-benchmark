@@ -34,6 +34,30 @@ profile::vector::config: |
         .message = .list[1]
         .program = "cloud-init"
 
+    # Some timestamp are discarted because the date are before the NTP client is configured
+    cloud_init_valid:
+      type: route
+      inputs:
+        - from_cloud_init
+      route:
+        valid:
+          type: "vrl"
+          source: |-
+           to_unix_timestamp!(.timestamp) > to_unix_timestamp(now()) - 3600*2
+
+    discarted_timestamp_range:
+      expire_after_ms: 1000
+      type: reduce
+      inputs:
+        - cloud_init_valid._unmatched
+    discarted_timestamp_remap:
+      type: remap
+      inputs: [discarted_timestamp_range]
+      source: |-
+        .message = to_unix_timestamp!(.timestamp_end) - to_unix_timestamp!(.timestamp)
+        .timestamp = now()
+        .program = "cloud-init-ntp-correction"
+
     from_journald:
       type: remap
       inputs: [puppet_agent_logs]
@@ -42,7 +66,7 @@ profile::vector::config: |
 
     to_elastic_format:
       type: remap
-      inputs: [from_journald, from_cloud_init]
+      inputs: [from_journald, cloud_init_valid.valid, discarted_timestamp_remap]
       source: |-
         .elastic.message = .message
         .elastic."@timestamp" = .timestamp
