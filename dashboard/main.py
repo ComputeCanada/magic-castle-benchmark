@@ -69,7 +69,15 @@ def search_start_end(es, index, run_id, program):
             "bool": {
               "must": [
                 {"match": {"run_id": run_id}},
-                {"match": {"program": program}}
+                {"match": {"program": program}},
+                {
+                  "range": {
+                    "@timestamp": {
+                      "gte": "now/y",
+                      "lt": "now+1y/y"
+                    }
+                  }
+                },
               ]
             }
           },
@@ -92,7 +100,7 @@ def search_start_end(es, index, run_id, program):
                 }
               }
             },
-            "missing_host": {
+            "missing_host": { # In Terraform case, there is no host
               "missing": {
                 "field": "host"
               },
@@ -234,6 +242,25 @@ def get_all_run(_es, index, run_ids):
     df['duration_s'] = (df['end'] - df['start']).dt.total_seconds()
     return df
 
+def check_failure(df):
+    result = []
+    required_programs = set(["puppet", "cloudinit", "terraform"])
+
+    def has_required_programs(programs):
+        return required_programs - set(programs)
+
+    # Update duration_s and start based on missing programs
+    for _, group in df.groupby("run_id"):
+        programs = group['program'].tolist()
+        missing_programs = has_required_programs(programs)
+        if missing_programs:
+            start = group.iloc[0]['start']
+            workspace = group.iloc[0]['workspace']
+            result.append(start)
+
+    return result
+
+
 def main():
     st.title("MCSpeed Dashboard")
 
@@ -271,6 +298,7 @@ def main():
         program_duration = df.groupby(['run_id', 'program', 'workspace'])['duration_s'].max().reset_index()
         run_start = df.groupby(['run_id', 'workspace'])['start'].min().reset_index()
         result = pd.merge(program_duration, run_start, on=['run_id', 'workspace'])
+        failed_runs = check_failure(result)
 
         fig = px.bar(result, x='start', y='duration_s', color='program',
             barmode='stack', facet_col='workspace',
@@ -283,17 +311,27 @@ def main():
              hover_data=['run_id'],
         )
         fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1].title()))
+
+        # Add a red "X" annotation on fail run
+        for start in failed_runs:
+            fig.add_annotation(x=start, y=0, text="X", showarrow=False, font=dict(color="red"))
+
         st.plotly_chart(fig)
 
-        run_id = st.selectbox("Run IDs", df['run_id'].unique(), index=None)
-        if run_id:
+        run_ids = st.multiselect(
+            'Run IDs', df['run_id'].unique(),
+            format_func=lambda x : f"{x}",
+            default=None)
+        for run_id in run_ids:
             df_single = df[df['run_id'] == run_id]
 
             if not df_single.empty:
                 fig = px.timeline(df_single, x_start="start", x_end="end", y="host", color="program",
-                     category_orders={'program': ['terraform', 'cloudinit', 'puppet']})
+                     category_orders={'program': ['terraform', 'cloudinit', 'puppet']},
+                     hover_data=['duration_s'])
 
                 fig.update_yaxes(autorange="reversed")
+                fig.update_layout(title=run_id)
                 st.plotly_chart(fig)
 
 if __name__ == "__main__":
