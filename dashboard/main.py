@@ -15,6 +15,8 @@ MAX_HOST_NB = 20
 
 PUPPET_DURATION_REGEX = r'\d+(\.\d+)?'
 
+pd.options.mode.copy_on_write = True
+
 def connect_to_opensearch(username, password, host, port):
     try:
         es = OpenSearch(
@@ -143,7 +145,6 @@ def search_start_end(es, index, run_id, program):
 
     except Exception as e:
         logger.error(f"Error searching {program} logs: {e}")
-        st.error(f"No {program} logs for {run_id}.")
         return pd.DataFrame()
 
 def search_puppet(es, index, run_id):
@@ -203,7 +204,6 @@ def search_puppet(es, index, run_id):
         return df
     except Exception as e:
         logger.error(f"Error searching puppet logs: {e}")
-        st.error(f"No puppet logs for {run_id}.")
         return pd.DataFrame()
 
 def list_unique_values(es, index, key):
@@ -239,6 +239,13 @@ def get_all_run(_es, index, run_ids):
         dfs.append(get_single_run(_es, index, run_id))
     df = pd.concat(dfs)
 
+
+    total_program = df.groupby(['run_id', 'workspace']).agg({'start':'min', 'end':'max'}).reset_index()
+    total_program['host'] = 'total'
+    total_program['program'] = 'total'
+
+    df = pd.concat([df, total_program])
+
     df['duration_s'] = (df['end'] - df['start']).dt.total_seconds()
     return df
 
@@ -255,7 +262,6 @@ def check_failure(df):
         missing_programs = has_required_programs(programs)
         if missing_programs:
             start = group.iloc[0]['start']
-            workspace = group.iloc[0]['workspace']
             result.append(start)
 
     return result
@@ -264,19 +270,17 @@ def check_failure(df):
 def main():
     st.title("MCSpeed Dashboard")
 
-    with st.sidebar:
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        host = st.text_input("Host")
-        port = st.number_input("Port", value=443)
-
-        if st.button("Connect"):
-            es = connect_to_opensearch(username, password, host, port)
-            if es:
-                st.success("Connected to OpenSearch")
-                st.session_state["es"] = es
+    username = st.secrets.get("opensearch_username")
+    password = st.secrets.get("opensearch_password")
+    host = st.secrets.get("opensearch_url")
+    port = 443
 
     es = st.session_state.get("es")
+    if es is None:
+        es = connect_to_opensearch(username, password, host, port)
+        st.success("Connected to OpenSearch")
+        st.session_state["es"] = es
+
     if es:
         run_ids = list_unique_values(es, INDEX, "run_id")
         df = get_all_run(es, INDEX, run_ids)
@@ -294,18 +298,24 @@ def main():
             min_value=min_date, max_value=max_date)
         df = df[(df['start'] >= date_range[0]) & (df['end'] <= date_range[1])]
 
-
         program_duration = df.groupby(['run_id', 'program', 'workspace'])['duration_s'].max().reset_index()
         run_start = df.groupby(['run_id', 'workspace'])['start'].min().reset_index()
         result = pd.merge(program_duration, run_start, on=['run_id', 'workspace'])
+
+        total_mask = result['program'] == 'total'
+        program_duration = result[~total_mask].groupby('run_id')['duration_s'].sum()
+        total_duration = result[total_mask].groupby('run_id')['duration_s'].sum()
+        result.loc[total_mask, 'duration_s'] = (total_duration - program_duration).values
+        result.loc[total_mask, 'program'] = 'unknown'
+
         failed_runs = check_failure(result)
 
         fig = px.bar(result, x='start', y='duration_s', color='program',
             barmode='stack', facet_col='workspace',
-            category_orders={'program': ['terraform', 'cloudinit', 'puppet']},
+            category_orders={'program': ['terraform', 'cloudinit', 'puppet', 'unknown']},
             labels={
                 "start": "Date",
-                "duration_s": "Run duration (s)",
+                "duration_s": "Program duration (s)",
                 "program": "Program"
              },
              hover_data=['run_id'],
@@ -318,20 +328,27 @@ def main():
 
         st.plotly_chart(fig)
 
-        run_ids = st.multiselect(
-            'Run IDs', df['run_id'].unique(),
+        runs = df.groupby(['run_id', 'workspace'])['start'].min().reset_index()
+        runs = runs.sort_values(['workspace', 'start'])
+        labels_to_run_id = {}
+        for _, run in runs.iterrows():
+            label = f"{run['workspace']} - {run['start']}"
+            labels_to_run_id[label] = run['run_id']
+        labels = st.multiselect(
+            'Runs', labels_to_run_id.keys(),
             format_func=lambda x : f"{x}",
             default=None)
-        for run_id in run_ids:
+        for label in labels:
+            run_id = labels_to_run_id[label]
             df_single = df[df['run_id'] == run_id]
 
             if not df_single.empty:
                 fig = px.timeline(df_single, x_start="start", x_end="end", y="host", color="program",
-                     category_orders={'program': ['terraform', 'cloudinit', 'puppet']},
+                     category_orders={'program': ['total', 'terraform', 'cloudinit', 'puppet']},
                      hover_data=['duration_s'])
 
                 fig.update_yaxes(autorange="reversed")
-                fig.update_layout(title=run_id)
+                fig.update_layout(title=label)
                 st.plotly_chart(fig)
 
 if __name__ == "__main__":
