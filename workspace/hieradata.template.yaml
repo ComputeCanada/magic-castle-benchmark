@@ -18,7 +18,7 @@ profile::vector::config: |
       type: journald
       data_dir: /var/lib/vector
       include_units: ["puppet.service"]
-      since_now: True
+      since_now: False
     cloud_init:
       type: file
       include:
