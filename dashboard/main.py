@@ -6,7 +6,6 @@ import datetime
 import re
 import plotly.express as px
 import logging
-from streamlit_plotly_events import plotly_events
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -329,8 +328,6 @@ def main():
 
         st.plotly_chart(fig)
 
-        select_plot = plotly_events(fig)
-        print(select_plot)
 
         runs = df.groupby(['run_id', 'workspace'])['start'].min().reset_index()
         runs = runs.sort_values(['workspace', 'start'])
