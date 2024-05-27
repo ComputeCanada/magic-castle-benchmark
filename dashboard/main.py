@@ -262,13 +262,14 @@ def check_failure(df):
         missing_programs = has_required_programs(programs)
         if missing_programs:
             start = group.iloc[0]['start']
-            result.append(start)
+            workspace = group['workspace'].unique()[0]
+            result.append((workspace, start))
 
     return result
 
 
 def main():
-    st.title("MCSpeed Dashboard")
+    st.header("MCSpeed Dashboard")
 
     username = st.secrets.get("opensearch_username")
     password = st.secrets.get("opensearch_password")
@@ -286,33 +287,29 @@ def main():
         df = get_all_run(es, INDEX, run_ids)
 
         workspaces = list_unique_values(es, INDEX, "workspace")
-        workspaces_options = st.multiselect(
-            'Clouds', workspaces, default=workspaces, format_func=lambda x : x.title())
-        df = df[df['workspace'].isin(workspaces_options)]
 
-        min_date = df['start'].min().to_pydatetime()
-        max_date = df['end'].max().to_pydatetime()
-        date_range = st.slider(
-            "Date range",
-            value=(min_date, max_date),
-            min_value=min_date, max_value=max_date)
-        df = df[(df['start'] >= date_range[0]) & (df['end'] <= date_range[1])]
+        with st.sidebar:
+            workspaces_options = st.multiselect(
+                'Clouds', workspaces, default=workspaces, format_func=lambda x : x.title())
+            df = df[df['workspace'].isin(workspaces_options)]
+
+            min_date = df['start'].min().to_pydatetime()
+            max_date = df['end'].max().to_pydatetime()
+            date_range = st.slider(
+                "Date range",
+                value=(min_date, max_date),
+                min_value=min_date, max_value=max_date)
+            df = df[(df['start'] >= date_range[0]) & (df['end'] <= date_range[1])]
 
         program_duration = df.groupby(['run_id', 'program', 'workspace'])['duration_s'].max().reset_index()
         run_start = df.groupby(['run_id', 'workspace'])['start'].min().reset_index()
         result = pd.merge(program_duration, run_start, on=['run_id', 'workspace'])
 
         total_mask = result['program'] == 'total'
-        program_duration = result[~total_mask].groupby('run_id')['duration_s'].sum()
-        total_duration = result[total_mask].groupby('run_id')['duration_s'].sum()
-        result.loc[total_mask, 'duration_s'] = (total_duration - program_duration).values
-        result.loc[total_mask, 'program'] = 'unknown'
-
         failed_runs = check_failure(result)
 
-        fig = px.bar(result, x='start', y='duration_s', color='program',
-            barmode='stack', facet_col='workspace',
-            category_orders={'program': ['terraform', 'cloudinit', 'puppet', 'unknown']},
+        fig = px.bar(result[total_mask], x='start', y='duration_s', color='workspace',
+            facet_col='workspace',
             labels={
                 "start": "Date",
                 "duration_s": "Program duration (s)",
@@ -322,11 +319,15 @@ def main():
         )
         fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1].title()))
 
+
         # Add a red "X" annotation on fail run
-        for start in failed_runs:
-            fig.add_annotation(x=start, y=0, text="X", showarrow=False, font=dict(color="red"))
+        map_facet = {x['name']: f"x{i+1}" for i, x in enumerate(fig.data)}
+        for workspace, start in failed_runs:
+            xref = map_facet[workspace]
+            fig.add_annotation(x=start, xref=xref, y=0, text="X", showarrow=False, font=dict(color="red"))
 
         st.plotly_chart(fig)
+
 
         runs = df.groupby(['run_id', 'workspace'])['start'].min().reset_index()
         runs = runs.sort_values(['workspace', 'start'])
