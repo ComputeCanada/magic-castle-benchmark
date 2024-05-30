@@ -62,5 +62,5 @@ jobs:
           run: ${{ steps.apply-run.outputs.run_id }}
           comment: "Apply Run from GitHub Actions CI ${{ github.sha }}"
       - name: Upload elasticsearch
-        if: fromJSON(steps.apply-run.outputs.payload).data.attributes.actions.IsConfirmable
+        if: fromJSON(steps.apply-run.outputs.payload).data.attributes.actions.IsConfirmable && always()
         run: ./scripts/push_elasticsearch.sh
