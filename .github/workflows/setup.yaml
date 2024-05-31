@@ -14,7 +14,7 @@ on:
 jobs:
   # Source: https://code.dblock.org/2021/09/03/generating-task-matrix-by-looping-over-repo-files-with-github-actions.html
   list-workspaces:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted]
     outputs:
       workspaces: ${{ steps.set-matrix.outputs.workspaces }}
     steps:
