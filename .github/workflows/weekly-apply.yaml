@@ -2,10 +2,11 @@ name: Terraform Apply Cron
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Midnight UTC. Must match with destroy
-    - cron: '0 6 * * *'
+    - cron: '0 0 * * 0' # Midnight UTC. Must match with destroy
 
 jobs:
   apply:
     uses: ./.github/workflows/terraform-apply.yaml
+    with:
+      subfolder: "weekly"
     secrets: inherit

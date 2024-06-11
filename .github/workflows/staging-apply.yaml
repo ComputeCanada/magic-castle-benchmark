@@ -6,8 +6,9 @@ on:
       - apply
 
 jobs:
-  apply-staging:
+  apply-staging-daily:
     uses: ./.github/workflows/terraform-apply.yaml
     with:
       opensearch_index: "staging"
+      subfolder: "daily"
     secrets: inherit

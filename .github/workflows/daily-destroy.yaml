@@ -8,4 +8,6 @@ on:
 jobs:
   destroy:
     uses: ./.github/workflows/terraform-destroy.yaml
+    with:
+      subfolder: "daily"
     secrets: inherit

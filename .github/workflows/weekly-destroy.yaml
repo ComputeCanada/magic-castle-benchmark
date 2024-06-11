@@ -1,0 +1,12 @@
+name: Terraform Destroy Cron
+
+on:
+  schedule:
+    - cron: '0 1 * * 0' # Must match with apply +1h
+
+jobs:
+  destroy:
+    uses: ./.github/workflows/terraform-destroy.yaml
+    with:
+      subfolder: "weekly"
+    secrets: inherit
