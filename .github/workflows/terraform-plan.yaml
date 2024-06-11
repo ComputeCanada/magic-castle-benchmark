@@ -14,6 +14,8 @@ env:
 jobs:
   setup:
     uses: ./.github/workflows/setup.yaml
+    with:
+      subfolder: "daily"
   terraform:
     name: "Terraform Plan"
     needs: setup
