@@ -6,7 +6,7 @@ The goal is to monitor infrastructure performance over time to detect performanc
 
 # Self-Hosted Runner
 
-We use self-hosted runner to deploy this project because it requires a lot of CI times.
+We use self-hosted runner to deploy this project to reduces the usage of GitGub CI credit.
 
 To add a new runner, we need to install some dependancies for this project:
 ```
@@ -14,4 +14,6 @@ sudo yum update -y && sudo yum install docker git libicu -y && sudo systemctl en
 sudo usermod -aG docker $USER
 ```
 
-A reboot is required for docker. Then follow instruction on the [Github new runner page](https://github.com/ComputeCanada/magic-castle-benchmark/settings/actions/runners/new). To start the runner at boot, `sudo ./svc.sh install` can be used.
+Then follow the instruction on the [Github new runner page](https://github.com/ComputeCanada/magic-castle-benchmark/settings/actions/runners/new).
+To start the runner at boot run: `sudo ./svc.sh install`.
+A reboot is required to apply the docker permission.
