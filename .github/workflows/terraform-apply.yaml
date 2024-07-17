@@ -35,7 +35,7 @@ jobs:
       TF_WORKSPACE: "${{ matrix.workspace }}"
       CONFIG_DIRECTORY: "./workspace/${{ inputs.subfolder }}/${{  matrix.workspace }}"
       RUN_ID: "${{ github.run_id }}_${{ matrix.workspace }}"
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted]
     permissions:
       contents: read
     steps:
