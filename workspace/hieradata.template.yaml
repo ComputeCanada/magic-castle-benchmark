@@ -89,6 +89,10 @@ profile::vector::config: |
         password: "$OPENSEARCH_PASSWORD"
       bulk:
         index: "${OPENSEARCH_INDEX}"
+      request
+        headers:
+          CF-Access-Client-Id: "$OPENSEARCH_CF_CLIENT"
+          CF-Access-Client-Secret: "$OPENSEARCH_CF_SECRET"
     output_console:
       type: console
       inputs: [to_elastic_format]
