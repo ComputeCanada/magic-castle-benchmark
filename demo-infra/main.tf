@@ -4,7 +4,7 @@ terraform {
 
 variable "pool" {
   description = "Slurm pool of compute nodes"
-  default = []
+  default     = []
 }
 
 module "openstack" {
@@ -17,9 +17,9 @@ module "openstack" {
   image        = "Rocky-8"
 
   instances = {
-    mgmt   = { type = "p4-6gb", tags = ["puppet", "mgmt", "nfs"], count = 1 }
-    login  = { type = "p2-3gb", tags = ["login", "public", "proxy"], count = 1 }
-    node   = { type = "p2-3gb", tags = ["node"], count = 1 }
+    mgmt  = { type = "p4-6gb", tags = ["puppet", "mgmt", "nfs"], count = 1 }
+    login = { type = "p2-3gb", tags = ["login", "public", "proxy"], count = 1 }
+    node  = { type = "p2-3gb", tags = ["node"], count = 1 }
   }
 
   # var.pool is managed by Slurm through Terraform REST API.
@@ -30,14 +30,13 @@ module "openstack" {
 
   volumes = {
     nfs = {
-      home     = { size = 100 }
-      project  = { size = 50 }
-      scratch  = { size = 50 }
+      home    = { size = 100 }
+      project = { size = 50 }
+      scratch = { size = 50 }
     }
   }
 
   public_keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL7dd00/9CXlTohQEgj5scMu1gOqrixPDVxF6Hrh67sD etiennedub"]
-  generate_ssh_key = true
 
   # hieradata = file("./hieradata.yaml")
 
