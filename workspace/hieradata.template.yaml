@@ -83,6 +83,7 @@ profile::vector::config: |
         - to_elastic_format
       endpoints:
         - "$OPENSEARCH_URL"
+      api_version: "v8"
       auth:
         strategy: basic
         user: "$OPENSEARCH_USERNAME"
