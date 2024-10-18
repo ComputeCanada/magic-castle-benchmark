@@ -18,6 +18,8 @@ env:
   OPENSEARCH_USERNAME: "${{ vars.OPENSEARCH_USERNAME }}"
   OPENSEARCH_URL: "${{ vars.OPENSEARCH_URL }}"
   OPENSEARCH_INDEX: "${{ inputs.opensearch_index }}"
+  OPENSEARCH_CF_CLIENT: "${{ vars.OPENSEARCH_CF_CLIENT }}"
+  OPENSEARCH_CF_SECRET: "${{ secrets.OPENSEARCH_CF_SECRET }}"
 
 jobs:
   setup:

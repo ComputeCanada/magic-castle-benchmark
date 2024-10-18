@@ -10,52 +10,49 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-INDEX = "mcspeed"
+INDEX = st.secrets.get("opensearch_index")
 MAX_HOST_NB = 20
 
-PUPPET_DURATION_REGEX = r'\d+(\.\d+)?'
+PUPPET_DURATION_REGEX = r"\d+(\.\d+)?"
 
 pd.options.mode.copy_on_write = True
 
-def connect_to_opensearch(username, password, host, port):
+
+def connect_to_opensearch(username, password, host, port, url_prefix=None, headers={}):
     try:
         es = OpenSearch(
-            hosts=[{'host': host, 'port': port}],
+            hosts=[{"host": host, "port": port}],
             http_compress=True,
             http_auth=(username, password),
             use_ssl=True,
+            url_prefix=url_prefix,
+            headers=headers,
         )
         return es
     except Exception as e:
         logger.error(f"Error connecting to OpenSearch: {e}")
-        st.error("Error connecting to OpenSearch. Please check your credentials and try again.")
+        st.error(
+            "Error connecting to OpenSearch. Please check your credentials and try again."
+        )
         return None
+
 
 def get_workspace_from_run_id(es, index, run_id):
     try:
         body = {
-          "size": 0,
-          "query": {
-            "term": {
-              "run_id": run_id
-            }
-          },
-          "aggs": {
-            "unique_workspaces": {
-              "terms": {
-                "field": "workspace",
-                "size": 10
-              }
-            }
-          }
+            "size": 0,
+            "query": {"term": {"run_id": run_id}},
+            "aggs": {
+                "unique_workspaces": {"terms": {"field": "workspace", "size": 10}}
+            },
         }
 
         res = es.search(index=f"{index}", body=body)
-        buckets = res['aggregations']['unique_workspaces']['buckets']
+        buckets = res["aggregations"]["unique_workspaces"]["buckets"]
         if len(buckets) != 1:
             raise Exception("Unknown workspace")
         else:
-            return buckets[0]['key']
+            return buckets[0]["key"]
 
     except Exception as e:
         logger.error(f"Error searching workspace for {run_id=}: {e}")
@@ -66,79 +63,51 @@ def get_workspace_from_run_id(es, index, run_id):
 def search_start_end(es, index, run_id, program):
     try:
         body = {
-          "size": 0,
-          "query": {
-            "bool": {
-              "must": [
-                {"match": {"run_id": run_id}},
-                {"match": {"program": program}},
-                {
-                  "range": {
-                    "@timestamp": {
-                      "gte": "now/y",
-                      "lt": "now+1y/y"
-                    }
-                  }
-                },
-              ]
-            }
-          },
-          "aggs": {
-            "hosts": {
-              "terms": {
-                "field": "host",
-                "size": MAX_HOST_NB
-              },
-              "aggs": {
-                "max_timestamp": {
-                  "max": {
-                    "field": "@timestamp"
-                  }
-                },
-                "min_timestamp": {
-                  "min": {
-                    "field": "@timestamp"
-                  }
+            "size": 0,
+            "query": {
+                "bool": {
+                    "must": [
+                        {"match": {"run_id": run_id}},
+                        {"match": {"program": program}},
+                        {"range": {"@timestamp": {"gte": "now/y", "lt": "now+1y/y"}}},
+                    ]
                 }
-              }
             },
-            "missing_host": { # In Terraform case, there is no host
-              "missing": {
-                "field": "host"
-              },
-              "aggs": {
-                "max_timestamp": {
-                  "max": {
-                    "field": "@timestamp"
-                  }
+            "aggs": {
+                "hosts": {
+                    "terms": {"field": "host", "size": MAX_HOST_NB},
+                    "aggs": {
+                        "max_timestamp": {"max": {"field": "@timestamp"}},
+                        "min_timestamp": {"min": {"field": "@timestamp"}},
+                    },
                 },
-                "min_timestamp": {
-                  "min": {
-                    "field": "@timestamp"
-                  }
-                }
-              }
-            }
-          }
+                "missing_host": {  # In Terraform case, there is no host
+                    "missing": {"field": "host"},
+                    "aggs": {
+                        "max_timestamp": {"max": {"field": "@timestamp"}},
+                        "min_timestamp": {"min": {"field": "@timestamp"}},
+                    },
+                },
+            },
         }
 
         res = es.search(index=f"{index}", body=body)
         entries = []
 
-        aggregations = res['aggregations']
-        missing_host = aggregations['missing_host']
-        if missing_host['doc_count'] != 0:
+        aggregations = res["aggregations"]
+        missing_host = aggregations["missing_host"]
+        if missing_host["doc_count"] != 0:
             # In Terraform case, there is no host
-            start = pd.to_datetime(missing_host['min_timestamp']['value_as_string'])
-            end = pd.to_datetime(missing_host['max_timestamp']['value_as_string'])
+            start = pd.to_datetime(missing_host["min_timestamp"]["value_as_string"])
+            end = pd.to_datetime(missing_host["max_timestamp"]["value_as_string"])
             host = None
-            entries.append({"host": host, "start": start, "end": end })
+            entries.append({"host": host, "start": start, "end": end})
 
-        for entry in aggregations['hosts']['buckets']:
-            start = pd.to_datetime(entry['min_timestamp']['value_as_string'])
-            end = pd.to_datetime(entry['max_timestamp']['value_as_string'])
-            host = entry['key']
-            entries.append({"host": host, "start": start, "end": end })
+        for entry in aggregations["hosts"]["buckets"]:
+            start = pd.to_datetime(entry["min_timestamp"]["value_as_string"])
+            end = pd.to_datetime(entry["max_timestamp"]["value_as_string"])
+            host = entry["key"]
+            entries.append({"host": host, "start": start, "end": end})
 
         df = pd.DataFrame(entries)
         return df
@@ -147,56 +116,52 @@ def search_start_end(es, index, run_id, program):
         logger.error(f"Error searching {program} logs: {e}")
         return pd.DataFrame()
 
+
 def search_puppet(es, index, run_id):
     try:
         body = {
-      "size": 0,
-      "query": {
-        "bool": {
-          "must": [
-            {"match": {"run_id": run_id}},
-            {"match": {"program": "puppet-agent"}},
-          ]
-        }
-      },
-      "aggs": {
-        "hosts": {
-          "terms": {
-            "field": "host",
-            "size": 10
-          },
-          "aggs": {
-            "first_applied_message": {
-              "filter": {
-                "match": {
-                  "message": "Applied"
+            "size": 0,
+            "query": {
+                "bool": {
+                    "must": [
+                        {"match": {"run_id": run_id}},
+                        {"match": {"program": "puppet-agent"}},
+                    ]
                 }
-              },
-              "aggs": {
-                "first_message": {
-                  "top_hits": {
-                    "size": 1,
-                    "sort": [{ "@timestamp": "asc" }]
-                  }
+            },
+            "aggs": {
+                "hosts": {
+                    "terms": {"field": "host", "size": 10},
+                    "aggs": {
+                        "first_applied_message": {
+                            "filter": {"match": {"message": "Applied"}},
+                            "aggs": {
+                                "first_message": {
+                                    "top_hits": {
+                                        "size": 1,
+                                        "sort": [{"@timestamp": "asc"}],
+                                    }
+                                }
+                            },
+                        }
+                    },
                 }
-              }
-            }
-          }
+            },
         }
-      }
-    }
 
         res = es.search(index=f"{index}", body=body)
         entries = []
-        for entry in res['aggregations']['hosts']['buckets']:
-            source = entry['first_applied_message']['first_message']['hits']['hits'][0]['_source']
-            message = source['message']
-            host = source['host']
+        for entry in res["aggregations"]["hosts"]["buckets"]:
+            source = entry["first_applied_message"]["first_message"]["hits"]["hits"][0][
+                "_source"
+            ]
+            message = source["message"]
+            host = source["host"]
             match = re.search(PUPPET_DURATION_REGEX, message)
             if match:
                 duration = float(match.group())
                 delta = datetime.timedelta(seconds=duration)
-                end = pd.to_datetime(source['@timestamp'])
+                end = pd.to_datetime(source["@timestamp"])
                 start = end - delta
                 entries.append({"host": host, "start": start, "end": end})
 
@@ -206,31 +171,39 @@ def search_puppet(es, index, run_id):
         logger.error(f"Error searching puppet logs: {e}")
         return pd.DataFrame()
 
+
 def list_unique_values(es, index, key):
     try:
-        query = {"size": 0, "aggs": {"unique_values": {"terms": {"field": key, "size": 1000}}}}
+        query = {
+            "size": 0,
+            "aggs": {"unique_values": {"terms": {"field": key, "size": 1000}}},
+        }
         res = es.search(index=index, body=query)
-        unique_values = [bucket["key"] for bucket in res["aggregations"]["unique_values"]["buckets"]]
+        unique_values = [
+            bucket["key"] for bucket in res["aggregations"]["unique_values"]["buckets"]
+        ]
         return unique_values
     except Exception as e:
         logger.error(f"Error listing unique values: {e}")
         return []
 
+
 def get_single_run(es, index, run_id):
     terraform_df = search_start_end(es, f"{index}", run_id, "terraform")
-    terraform_df['program'] = "terraform"
-    terraform_df['host'] = "terraform"
+    terraform_df["program"] = "terraform"
+    terraform_df["host"] = "terraform"
     cloudinit_df = search_start_end(es, f"{index}", run_id, "cloud-init")
-    cloudinit_df['program'] = "cloudinit"
+    cloudinit_df["program"] = "cloudinit"
     puppet_df = search_puppet(es, INDEX, run_id)
-    puppet_df['program'] = "puppet"
+    puppet_df["program"] = "puppet"
 
     workspace = get_workspace_from_run_id(es, index, run_id)
 
     df = pd.concat([terraform_df, puppet_df, cloudinit_df], ignore_index=True)
-    df['run_id'] = run_id
-    df['workspace'] = workspace
+    df["run_id"] = run_id
+    df["workspace"] = workspace
     return df
+
 
 @st.cache_data
 def get_all_run(_es, index, run_ids):
@@ -239,15 +212,19 @@ def get_all_run(_es, index, run_ids):
         dfs.append(get_single_run(_es, index, run_id))
     df = pd.concat(dfs)
 
-
-    total_program = df.groupby(['run_id', 'workspace']).agg({'start':'min', 'end':'max'}).reset_index()
-    total_program['host'] = 'total'
-    total_program['program'] = 'total'
+    total_program = (
+        df.groupby(["run_id", "workspace"])
+        .agg({"start": "min", "end": "max"})
+        .reset_index()
+    )
+    total_program["host"] = "total"
+    total_program["program"] = "total"
 
     df = pd.concat([df, total_program])
 
-    df['duration_s'] = (df['end'] - df['start']).dt.total_seconds()
+    df["duration_s"] = (df["end"] - df["start"]).dt.total_seconds()
     return df
+
 
 def check_failure(df):
     result = []
@@ -258,11 +235,11 @@ def check_failure(df):
 
     # Update duration_s and start based on missing programs
     for _, group in df.groupby("run_id"):
-        programs = group['program'].tolist()
+        programs = group["program"].tolist()
         missing_programs = has_required_programs(programs)
         if missing_programs:
-            start = group.iloc[0]['start']
-            workspace = group['workspace'].unique()[0]
+            start = group.iloc[0]["start"]
+            workspace = group["workspace"].unique()[0]
             result.append((workspace, start))
 
     return result
@@ -273,12 +250,16 @@ def main():
 
     username = st.secrets.get("opensearch_username")
     password = st.secrets.get("opensearch_password")
-    host = st.secrets.get("opensearch_url")
+    host = st.secrets.get("opensearch_host")
+    url_prefix = st.secrets.get("opensearch_url_prefix")
+    headers = st.secrets.get("opensearch_headers")
     port = 443
 
     es = st.session_state.get("es")
     if es is None:
-        es = connect_to_opensearch(username, password, host, port)
+        es = connect_to_opensearch(
+            username, password, host, port, url_prefix=url_prefix, headers=headers
+        )
         st.success("Connected to OpenSearch")
         st.session_state["es"] = es
 
@@ -290,67 +271,94 @@ def main():
 
         with st.sidebar:
             workspaces_options = st.multiselect(
-                'Clouds', workspaces, default=workspaces, format_func=lambda x : x.title())
-            df = df[df['workspace'].isin(workspaces_options)]
+                "Clouds",
+                workspaces,
+                default=workspaces,
+                format_func=lambda x: x.title(),
+            )
+            df = df[df["workspace"].isin(workspaces_options)]
 
-            min_date = df['start'].min().to_pydatetime()
-            max_date = df['end'].max().to_pydatetime()
+            min_date = df["start"].min().to_pydatetime()
+            max_date = df["end"].max().to_pydatetime()
             date_range = st.slider(
                 "Date range",
                 value=(min_date, max_date),
-                min_value=min_date, max_value=max_date)
-            df = df[(df['start'] >= date_range[0]) & (df['end'] <= date_range[1])]
+                min_value=min_date,
+                max_value=max_date,
+            )
+            df = df[(df["start"] >= date_range[0]) & (df["end"] <= date_range[1])]
 
-        program_duration = df.groupby(['run_id', 'program', 'workspace'])['duration_s'].max().reset_index()
-        run_start = df.groupby(['run_id', 'workspace'])['start'].min().reset_index()
-        result = pd.merge(program_duration, run_start, on=['run_id', 'workspace'])
+        program_duration = (
+            df.groupby(["run_id", "program", "workspace"])["duration_s"]
+            .max()
+            .reset_index()
+        )
+        run_start = df.groupby(["run_id", "workspace"])["start"].min().reset_index()
+        result = pd.merge(program_duration, run_start, on=["run_id", "workspace"])
 
-        total_mask = result['program'] == 'total'
+        total_mask = result["program"] == "total"
         failed_runs = check_failure(result)
 
-        fig = px.bar(result[total_mask], x='start', y='duration_s', color='workspace',
-            facet_col='workspace',
+        fig = px.bar(
+            result[total_mask],
+            x="start",
+            y="duration_s",
+            color="workspace",
+            facet_col="workspace",
             labels={
                 "start": "Date",
                 "duration_s": "Deployment duration (s)",
-                "program": "Program"
-             },
-             hover_data=['run_id'],
+                "program": "Program",
+            },
+            hover_data=["run_id"],
         )
         fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1].title()))
 
-
         # Add a red "X" annotation on fail run
-        map_facet = {x['name']: f"x{i+1}" for i, x in enumerate(fig.data)}
+        map_facet = {x["name"]: f"x{i+1}" for i, x in enumerate(fig.data)}
         for workspace, start in failed_runs:
             xref = map_facet[workspace]
-            fig.add_annotation(x=start, xref=xref, y=0, text="X", showarrow=False, font=dict(color="red"))
+            fig.add_annotation(
+                x=start,
+                xref=xref,
+                y=0,
+                text="X",
+                showarrow=False,
+                font=dict(color="red"),
+            )
 
         st.plotly_chart(fig)
 
-
-        runs = df.groupby(['run_id', 'workspace'])['start'].min().reset_index()
-        runs = runs.sort_values(['workspace', 'start'])
+        runs = df.groupby(["run_id", "workspace"])["start"].min().reset_index()
+        runs = runs.sort_values(["workspace", "start"])
         labels_to_run_id = {}
         for _, run in runs.iterrows():
             label = f"{run['workspace']} - {run['start']}"
-            labels_to_run_id[label] = run['run_id']
+            labels_to_run_id[label] = run["run_id"]
         labels = st.multiselect(
-            'Runs', labels_to_run_id.keys(),
-            format_func=lambda x : f"{x}",
-            default=None)
+            "Runs", labels_to_run_id.keys(), format_func=lambda x: f"{x}", default=None
+        )
         for label in labels:
             run_id = labels_to_run_id[label]
-            df_single = df[df['run_id'] == run_id]
+            df_single = df[df["run_id"] == run_id]
 
             if not df_single.empty:
-                fig = px.timeline(df_single, x_start="start", x_end="end", y="host", color="program",
-                     category_orders={'program': ['total', 'terraform', 'cloudinit', 'puppet']},
-                     hover_data=['duration_s'])
+                fig = px.timeline(
+                    df_single,
+                    x_start="start",
+                    x_end="end",
+                    y="host",
+                    color="program",
+                    category_orders={
+                        "program": ["total", "terraform", "cloudinit", "puppet"]
+                    },
+                    hover_data=["duration_s"],
+                )
 
                 fig.update_yaxes(autorange="reversed")
                 fig.update_layout(title=label)
                 st.plotly_chart(fig)
+
 
 if __name__ == "__main__":
     main()

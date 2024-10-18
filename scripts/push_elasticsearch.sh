@@ -3,10 +3,12 @@
 FILENAME="./output.txt"
 
 # Remove color
-cat $FILENAME | grep timestamp | sed -e 's/\x1b\[[0-9;]*m//g' > /tmp/log
+cat $FILENAME | grep timestamp | sed -e 's/\x1b\[[0-9;]*m//g' >/tmp/log
 
 # Force mapping for run_id in case the index is new
-curl -X PUT -u "${OPENSEARCH_USERNAME}:${OPENSEARCH_PASSWORD}" "${OPENSEARCH_URL}/${OPENSEARCH_INDEX}" -H 'Content-Type: application/json' -d '
+curl -X PUT \
+  -H "CF-Access-Client-Id: ${OPENSEARCH_CF_CLIENT}" -H "CF-Access-Client-Secret: ${OPENSEARCH_CF_SECRET}" -H 'Content-Type: application/json' \
+  -u "${OPENSEARCH_USERNAME}:${OPENSEARCH_PASSWORD}" "${OPENSEARCH_URL}/${OPENSEARCH_INDEX}" -d '
 {
   "mappings": {
     "properties":{
@@ -20,5 +22,7 @@ curl -X PUT -u "${OPENSEARCH_USERNAME}:${OPENSEARCH_PASSWORD}" "${OPENSEARCH_URL
 '
 
 while IFS= read -r line; do
-    curl -X POST -u "${OPENSEARCH_USERNAME}:${OPENSEARCH_PASSWORD}" "${OPENSEARCH_URL}/${OPENSEARCH_INDEX}/_doc" -H 'Content-Type: application/json' -d "${line}"
+  curl -X POST \
+    -H "CF-Access-Client-Id: ${OPENSEARCH_CF_CLIENT}" -H "CF-Access-Client-Secret: ${OPENSEARCH_CF_SECRET}" -H 'Content-Type: application/json' \
+    -u "${OPENSEARCH_USERNAME}:${OPENSEARCH_PASSWORD}" "${OPENSEARCH_URL}/${OPENSEARCH_INDEX}/_doc" -d "${line}"
 done < <(jq -c "del(.hook) | del(.outputs) | . + { \"run_id\": \"${RUN_ID}\", \"workspace\": \"${TF_WORKSPACE}\", \"program\":\"terraform\" }" /tmp/log)
