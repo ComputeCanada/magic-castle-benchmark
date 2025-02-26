@@ -89,6 +89,7 @@ profile::vector::config: |
         user: "$OPENSEARCH_USERNAME"
         password: "$OPENSEARCH_PASSWORD"
       bulk:
+        action "create"
         index: "${OPENSEARCH_INDEX}"
       request:
         headers:
