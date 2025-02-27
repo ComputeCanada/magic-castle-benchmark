@@ -130,7 +130,7 @@ def search_puppet(es, index, run_id):
             },
             "aggs": {
                 "hosts": {
-                    "terms": {"field": "host", "size": 10},
+                    "terms": {"field": "host.keyword", "size": 10},
                     "aggs": {
                         "first_applied_message": {
                             "filter": {"match": {"message": "Applied"}},
