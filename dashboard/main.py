@@ -43,7 +43,7 @@ def get_workspace_from_run_id(es, index, run_id):
             "size": 0,
             "query": {"term": {"run_id": run_id}},
             "aggs": {
-                "unique_workspaces": {"terms": {"field": "workspace", "size": 10}}
+                "unique_workspaces": {"terms": {"field": "workspace.keyword", "size": 10}}
             },
         }
 
@@ -75,14 +75,14 @@ def search_start_end(es, index, run_id, program):
             },
             "aggs": {
                 "hosts": {
-                    "terms": {"field": "host", "size": MAX_HOST_NB},
+                    "terms": {"field": "host.keyword", "size": MAX_HOST_NB},
                     "aggs": {
                         "max_timestamp": {"max": {"field": "@timestamp"}},
                         "min_timestamp": {"min": {"field": "@timestamp"}},
                     },
                 },
                 "missing_host": {  # In Terraform case, there is no host
-                    "missing": {"field": "host"},
+                    "missing": {"field": "host.keyword"},
                     "aggs": {
                         "max_timestamp": {"max": {"field": "@timestamp"}},
                         "min_timestamp": {"min": {"field": "@timestamp"}},
@@ -90,7 +90,6 @@ def search_start_end(es, index, run_id, program):
                 },
             },
         }
-
         res = es.search(index=f"{index}", body=body)
         entries = []
 
@@ -131,7 +130,7 @@ def search_puppet(es, index, run_id):
             },
             "aggs": {
                 "hosts": {
-                    "terms": {"field": "host", "size": 10},
+                    "terms": {"field": "host.keyword", "size": 10},
                     "aggs": {
                         "first_applied_message": {
                             "filter": {"match": {"message": "Applied"}},
@@ -176,7 +175,7 @@ def list_unique_values(es, index, key):
     try:
         query = {
             "size": 0,
-            "aggs": {"unique_values": {"terms": {"field": key, "size": 1000}}},
+            "aggs": {"unique_values": {"terms": {"field": f"{key}.keyword", "size": 1000}}},
         }
         res = es.search(index=index, body=query)
         unique_values = [
