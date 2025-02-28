@@ -171,11 +171,28 @@ def search_puppet(es, index, run_id):
         return pd.DataFrame()
 
 
-def list_unique_values(es, index, key):
+def get_run_ids(es, index, limit=10):
     try:
         query = {
             "size": 0,
-            "aggs": {"unique_values": {"terms": {"field": f"{key}.keyword", "size": 1000}}},
+            "aggs": {
+                "unique_values": {
+                    "terms": {
+                        "field": "run_id.keyword",
+                        "size": limit,
+                        "order": {
+                            "first_event_occur": "desc"
+                        }
+                    },
+                    "aggs": {
+                        "first_event_occur": {
+                            "min": {
+                                "field": "@timestamp"
+                            }
+                        }
+                    }
+                }
+            }
         }
         res = es.search(index=index, body=query)
         unique_values = [
@@ -263,10 +280,10 @@ def main():
         st.session_state["es"] = es
 
     if es:
-        run_ids = list_unique_values(es, INDEX, "run_id")
+        run_ids = get_run_ids(es, INDEX)
         df = get_all_run(es, INDEX, run_ids)
 
-        workspaces = list_unique_values(es, INDEX, "workspace")
+        workspaces = df['workspace'].unique()
 
         with st.sidebar:
             workspaces_options = st.multiselect(
