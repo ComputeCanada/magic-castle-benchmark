@@ -1,4 +1,4 @@
-name: Terraform Apply Cron
+name: Terraform Apply Cron Daily
 
 on:
   schedule:

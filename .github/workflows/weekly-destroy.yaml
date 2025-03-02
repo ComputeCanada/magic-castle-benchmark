@@ -1,4 +1,4 @@
-name: Terraform Destroy Cron
+name: Terraform Destroy Cron Weekly
 
 on:
   schedule:
