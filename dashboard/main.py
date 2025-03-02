@@ -171,7 +171,8 @@ def search_puppet(es, index, run_id):
         return pd.DataFrame()
 
 
-def get_run_ids(es, index, limit=10):
+@st.cache_data(ttl="1h")
+def get_run_ids(_es, index, limit=10):
     try:
         query = {
             "size": 0,
@@ -194,7 +195,7 @@ def get_run_ids(es, index, limit=10):
                 }
             }
         }
-        res = es.search(index=index, body=query)
+        res = _es.search(index=index, body=query)
         unique_values = [
             bucket["key"] for bucket in res["aggregations"]["unique_values"]["buckets"]
         ]
@@ -203,29 +204,25 @@ def get_run_ids(es, index, limit=10):
         logger.error(f"Error listing unique values: {e}")
         return []
 
-
-def get_single_run(es, index, run_id):
-    terraform_df = search_start_end(es, f"{index}", run_id, "terraform")
+@st.cache_data(ttl="1d")
+def get_single_run(_es, index, run_id):
+    terraform_df = search_start_end(_es, f"{index}", run_id, "terraform")
     terraform_df["program"] = "terraform"
     terraform_df["host"] = "terraform"
-    cloudinit_df = search_start_end(es, f"{index}", run_id, "cloud-init")
+    cloudinit_df = search_start_end(_es, f"{index}", run_id, "cloud-init")
     cloudinit_df["program"] = "cloudinit"
-    puppet_df = search_puppet(es, INDEX, run_id)
+    puppet_df = search_puppet(_es, INDEX, run_id)
     puppet_df["program"] = "puppet"
 
-    workspace = get_workspace_from_run_id(es, index, run_id)
+    workspace = get_workspace_from_run_id(_es, index, run_id)
 
     df = pd.concat([terraform_df, puppet_df, cloudinit_df], ignore_index=True)
     df["run_id"] = run_id
     df["workspace"] = workspace
     return df
 
-
-@st.cache_data
-def get_all_run(_es, index, run_ids):
-    dfs = []
-    for run_id in run_ids:
-        dfs.append(get_single_run(_es, index, run_id))
+def get_all_run(es, index, run_ids):
+    dfs = [get_single_run(es, index, run_id) for run_id in run_ids]
     df = pd.concat(dfs)
 
     total_program = (
