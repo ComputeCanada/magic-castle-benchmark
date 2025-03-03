@@ -278,6 +278,11 @@ def main():
 
     if es:
         run_ids = get_run_ids(es, INDEX)
+        if len(run_ids) == 0:
+            st.warning("No benchmark run found")
+            get_run_ids.clear()
+            return
+
         df = get_all_run(es, INDEX, run_ids)
 
         workspaces = df['workspace'].unique()
