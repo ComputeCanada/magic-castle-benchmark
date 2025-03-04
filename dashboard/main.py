@@ -17,6 +17,44 @@ PUPPET_DURATION_REGEX = r"\d+(\.\d+)?"
 
 pd.options.mode.copy_on_write = True
 
+START_END_QUERIES = {
+    "terraform": {
+        "size": 0,
+        "query": {
+            "bool": {
+                "must": [
+                    {"match": {"program": "terraform"}},
+                ]
+            }
+        },
+        "aggs": {
+            "max_timestamp": {"max": {"field": "@timestamp"}},
+            "min_timestamp": {"min": {"field": "@timestamp"}},
+            "log_level": {
+                "terms": {"field": "@level.keyword", "size": 5},
+            }
+        },
+    },
+    "cloud-init": {
+        "size": 0,
+        "query": {
+            "bool": {
+                "must": [
+                    {"match": {"program": "cloud-init"}},
+                ]
+            }
+        },
+        "aggs": {
+            "hosts": {
+                "terms": {"field": "host.keyword", "size": MAX_HOST_NB},
+                "aggs": {
+                    "max_timestamp": {"max": {"field": "@timestamp"}},
+                    "min_timestamp": {"min": {"field": "@timestamp"}},
+                },
+            },
+        },
+    },
+}
 
 def connect_to_opensearch(username, password, host, port, url_prefix=None, headers={}):
     try:
@@ -61,59 +99,33 @@ def get_workspace_from_run_id(es, index, run_id):
 
 
 def search_start_end(es, index, run_id, program):
+    body = START_END_QUERIES[program].copy()
+    body["query"]["bool"]["must"].append({"match" : {"run_id" :  run_id}})
+        
     try:
-        body = {
-            "size": 0,
-            "query": {
-                "bool": {
-                    "must": [
-                        {"match": {"run_id": run_id}},
-                        {"match": {"program": program}},
-                        {"range": {"@timestamp": {"gte": "now/y", "lt": "now+1y/y"}}},
-                    ]
-                }
-            },
-            "aggs": {
-                "hosts": {
-                    "terms": {"field": "host.keyword", "size": MAX_HOST_NB},
-                    "aggs": {
-                        "max_timestamp": {"max": {"field": "@timestamp"}},
-                        "min_timestamp": {"min": {"field": "@timestamp"}},
-                    },
-                },
-                "missing_host": {  # In Terraform case, there is no host
-                    "missing": {"field": "host.keyword"},
-                    "aggs": {
-                        "max_timestamp": {"max": {"field": "@timestamp"}},
-                        "min_timestamp": {"min": {"field": "@timestamp"}},
-                    },
-                },
-            },
-        }
         res = es.search(index=f"{index}", body=body)
-        entries = []
+    except Exception as e:
+        logger.error(f"Error searching {program} logs: {e}")
+        return pd.DataFrame()
 
-        aggregations = res["aggregations"]
-        missing_host = aggregations["missing_host"]
-        if missing_host["doc_count"] != 0:
-            # In Terraform case, there is no host
-            start = pd.to_datetime(missing_host["min_timestamp"]["value_as_string"])
-            end = pd.to_datetime(missing_host["max_timestamp"]["value_as_string"])
-            host = None
-            entries.append({"host": host, "start": start, "end": end})
-
+    entries = []
+    aggregations = res["aggregations"]
+    if "hosts" in aggregations:
         for entry in aggregations["hosts"]["buckets"]:
             start = pd.to_datetime(entry["min_timestamp"]["value_as_string"])
             end = pd.to_datetime(entry["max_timestamp"]["value_as_string"])
             host = entry["key"]
-            entries.append({"host": host, "start": start, "end": end})
-
-        df = pd.DataFrame(entries)
-        return df
-
-    except Exception as e:
-        logger.error(f"Error searching {program} logs: {e}")
-        return pd.DataFrame()
+            entries.append({"host": host, "start": start, "end": end, "errors": 0})
+    elif "min_timestamp" in aggregations:
+        try:
+            start = pd.to_datetime(aggregations["min_timestamp"]["value_as_string"])
+            end = pd.to_datetime(aggregations["max_timestamp"]["value_as_string"])
+            errors = sum(bucket['doc_count'] for bucket in aggregations["log_level"]["buckets"] if bucket['key'] == 'error')
+            entries.append({"host": None, "start": start, "end": end, "errors": errors})
+        except:
+            return pd.DataFrame()
+    df = pd.DataFrame(entries)
+    return df
 
 
 def search_puppet(es, index, run_id):
@@ -122,7 +134,7 @@ def search_puppet(es, index, run_id):
             "size": 0,
             "query": {
                 "bool": {
-                    "must": [
+                    "filter": [
                         {"match": {"run_id": run_id}},
                         {"match": {"program": "puppet-agent"}},
                     ]
@@ -162,7 +174,7 @@ def search_puppet(es, index, run_id):
                 delta = datetime.timedelta(seconds=duration)
                 end = pd.to_datetime(source["@timestamp"])
                 start = end - delta
-                entries.append({"host": host, "start": start, "end": end})
+                entries.append({"host": host, "start": start, "end": end, "errors": 0})
 
         df = pd.DataFrame(entries)
         return df
@@ -227,14 +239,13 @@ def get_all_run(es, index, run_ids):
 
     total_program = (
         df.groupby(["run_id", "workspace"])
-        .agg({"start": "min", "end": "max"})
+        .agg({"start": "min", "end": "max", "errors": "sum"})
         .reset_index()
     )
     total_program["host"] = "total"
     total_program["program"] = "total"
 
     df = pd.concat([df, total_program])
-
     df["duration_s"] = (df["end"] - df["start"]).dt.total_seconds()
     return df
 
@@ -254,7 +265,6 @@ def check_failure(df):
             start = group.iloc[0]["start"]
             workspace = group["workspace"].unique()[0]
             result.append((workspace, start))
-
     return result
 
 
@@ -284,7 +294,7 @@ def main():
             return
 
         df = get_all_run(es, INDEX, run_ids)
-
+        import pdb; pdb.set_trace()
         workspaces = df['workspace'].unique()
 
         with st.sidebar:
@@ -316,7 +326,6 @@ def main():
 
         total_mask = result["program"] == "total"
         failed_runs = check_failure(result)
-
         fig = px.bar(
             result[total_mask],
             x="start",
@@ -351,7 +360,8 @@ def main():
         runs = runs.sort_values(["workspace", "start"])
         labels_to_run_id = {}
         for _, run in runs.iterrows():
-            label = f"{run['workspace']} - {run['start']}"
+            start_ = run['start'].strftime("%Y-%m-%d, %H:%M:%S UTC")
+            label = f"{run['workspace']} - {start_}"
             labels_to_run_id[label] = run["run_id"]
         labels = st.multiselect(
             "Runs", labels_to_run_id.keys(), format_func=lambda x: f"{x}", default=None
