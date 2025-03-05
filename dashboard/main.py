@@ -6,6 +6,7 @@ import datetime
 import re
 import plotly.express as px
 import logging
+from copy import deepcopy
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -85,7 +86,7 @@ def get_workspace_from_run_id(es, index, run_id):
             },
         }
 
-        res = es.search(index=f"{index}", body=body)
+        res = es.search(index=f"{index}", body=body, request_timeout=30)
         buckets = res["aggregations"]["unique_workspaces"]["buckets"]
         if len(buckets) != 1:
             raise Exception("Unknown workspace")
@@ -99,11 +100,11 @@ def get_workspace_from_run_id(es, index, run_id):
 
 
 def search_start_end(es, index, run_id, program):
-    body = START_END_QUERIES[program].copy()
+    body = deepcopy(START_END_QUERIES[program])
     body["query"]["bool"]["must"].append({"match" : {"run_id" :  run_id}})
-        
+
     try:
-        res = es.search(index=f"{index}", body=body)
+        res = es.search(index=f"{index}", body=body, request_timeout=30)
     except Exception as e:
         logger.error(f"Error searching {program} logs: {e}")
         return pd.DataFrame()
@@ -160,7 +161,7 @@ def search_puppet(es, index, run_id):
             },
         }
 
-        res = es.search(index=f"{index}", body=body)
+        res = es.search(index=f"{index}", body=body, request_timeout=30)
         entries = []
         for entry in res["aggregations"]["hosts"]["buckets"]:
             source = entry["first_applied_message"]["first_message"]["hits"]["hits"][0][
@@ -207,7 +208,7 @@ def get_run_ids(_es, index, limit=10):
                 }
             }
         }
-        res = _es.search(index=index, body=query)
+        res = _es.search(index=index, body=query, request_timeout=30)
         unique_values = [
             bucket["key"] for bucket in res["aggregations"]["unique_values"]["buckets"]
         ]
@@ -266,7 +267,6 @@ def check_failure(df):
             start = group.iloc[0]["start"]
             workspace = group["workspace"].unique()[0]
             result.append((workspace, start))
-    import pdb; pdb.set_trace()
     return result
 
 
