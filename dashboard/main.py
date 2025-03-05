@@ -132,59 +132,59 @@ def search_start_end(es, index, run_id, program):
 
 
 def search_puppet(es, index, run_id):
-    try:
-        body = {
-            "size": 0,
-            "query": {
-                "bool": {
-                    "filter": [
-                        {"match": {"run_id": run_id}},
-                        {"match": {"program": "puppet-agent"}},
-                    ]
-                }
-            },
-            "aggs": {
-                "hosts": {
-                    "terms": {"field": "host.keyword", "size": 10},
-                    "aggs": {
-                        "first_applied_message": {
-                            "filter": {"match": {"message": "Applied"}},
-                            "aggs": {
-                                "first_message": {
-                                    "top_hits": {
-                                        "size": 1,
-                                        "sort": [{"@timestamp": "asc"}],
-                                    }
+    body = {
+        "size": 0,
+        "query": {
+            "bool": {
+                "filter": [
+                    {"match": {"run_id": run_id}},
+                    {"match": {"program": "puppet-agent"}},
+                    {"range": {"@timestamp": {"gte": "now/y", "lt": "now+1y/y"}}},
+                ]
+            }
+        },
+        "aggs": {
+            "hosts": {
+                "terms": {"field": "host.keyword", "size": 10},
+                "aggs": {
+                    "first_applied_message": {
+                        "filter": {"match": {"message": "Applied"}},
+                        "aggs": {
+                            "first_message": {
+                                "top_hits": {
+                                    "size": 1,
+                                    "sort": [{"@timestamp": "asc"}],
                                 }
-                            },
-                        }
-                    },
-                }
-            },
-        }
-
+                            }
+                        },
+                    }
+                },
+            }
+        },
+    }
+    try:
         res = es.search(index=f"{index}", body=body, request_timeout=30)
-        entries = []
-        for entry in res["aggregations"]["hosts"]["buckets"]:
-            source = entry["first_applied_message"]["first_message"]["hits"]["hits"][0][
-                "_source"
-            ]
-            message = source["message"]
-            host = source["host"]
-            match = re.search(PUPPET_DURATION_REGEX, message)
-            if match:
-                duration = float(match.group())
-                delta = datetime.timedelta(seconds=duration)
-                end = pd.to_datetime(source["@timestamp"])
-                start = end - delta
-                entries.append({"host": host, "start": start, "end": end, "errors": 0})
-
-        df = pd.DataFrame(entries)
-        return df
     except Exception as e:
         logger.error(f"Error searching puppet logs: {e}")
         return pd.DataFrame()
 
+    entries = []
+    for entry in res["aggregations"]["hosts"]["buckets"]:
+        source = entry["first_applied_message"]["first_message"]["hits"]["hits"][0][
+            "_source"
+        ]
+        message = source["message"]
+        host = source["host"]
+        match = re.search(PUPPET_DURATION_REGEX, message)
+        if match:
+            duration = float(match.group())
+            delta = datetime.timedelta(seconds=duration)
+            end = pd.to_datetime(source["@timestamp"])
+            start = end - delta
+            entries.append({"host": host, "start": start, "end": end, "errors": 0})
+
+    df = pd.DataFrame(entries)
+    return df
 
 @st.cache_data(ttl="1h")
 def get_run_ids(_es, index, limit=10):
