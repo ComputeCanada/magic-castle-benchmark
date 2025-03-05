@@ -25,6 +25,7 @@ START_END_QUERIES = {
             "bool": {
                 "must": [
                     {"match": {"program": "terraform"}},
+                    {"range": {"@timestamp": {"gte": "now/y", "lt": "now+1y/y"}}},
                 ]
             }
         },
@@ -42,6 +43,7 @@ START_END_QUERIES = {
             "bool": {
                 "must": [
                     {"match": {"program": "cloud-init"}},
+                    {"range": {"@timestamp": {"gte": "now/y", "lt": "now+1y/y"}}},
                 ]
             }
         },
