@@ -254,17 +254,19 @@ def check_failure(df):
     result = []
     required_programs = set(["puppet", "cloudinit", "terraform"])
 
-    def has_required_programs(programs):
-        return required_programs - set(programs)
+    def has_missing_programs(programs):
+        return len(required_programs - set(programs)) > 0
 
     # Update duration_s and start based on missing programs
     for _, group in df.groupby("run_id"):
-        programs = group["program"].tolist()
-        missing_programs = has_required_programs(programs)
-        if missing_programs:
+        if (
+            group['errors'].sum() > 0 or
+            has_missing_programs(group["program"].tolist())
+        ):
             start = group.iloc[0]["start"]
             workspace = group["workspace"].unique()[0]
             result.append((workspace, start))
+    import pdb; pdb.set_trace()
     return result
 
 
@@ -294,8 +296,8 @@ def main():
             return
 
         df = get_all_run(es, INDEX, run_ids)
-        import pdb; pdb.set_trace()
         workspaces = df['workspace'].unique()
+        failed_runs = check_failure(df)
 
         with st.sidebar:
             workspaces_options = st.multiselect(
@@ -325,7 +327,6 @@ def main():
         result = pd.merge(program_duration, run_start, on=["run_id", "workspace"])
 
         total_mask = result["program"] == "total"
-        failed_runs = check_failure(result)
         fig = px.bar(
             result[total_mask],
             x="start",
