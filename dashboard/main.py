@@ -77,30 +77,6 @@ def connect_to_opensearch(username, password, host, port, url_prefix=None, heade
         )
         return None
 
-
-def get_workspace_from_run_id(es, index, run_id):
-    try:
-        body = {
-            "size": 0,
-            "query": {"term": {"run_id": run_id}},
-            "aggs": {
-                "unique_workspaces": {"terms": {"field": "workspace.keyword", "size": 10}}
-            },
-        }
-
-        res = es.search(index=f"{index}", body=body, request_timeout=30)
-        buckets = res["aggregations"]["unique_workspaces"]["buckets"]
-        if len(buckets) != 1:
-            raise Exception("Unknown workspace")
-        else:
-            return buckets[0]["key"]
-
-    except Exception as e:
-        logger.error(f"Error searching workspace for {run_id=}: {e}")
-        st.error(f"Error searching workspace for {run_id=}. Please try again.")
-        return pd.DataFrame()
-
-
 def search_start_end(es, index, run_id, program):
     body = deepcopy(START_END_QUERIES[program])
     body["query"]["bool"]["must"].append({"match" : {"run_id" :  run_id}})
@@ -233,7 +209,8 @@ def get_single_run(_es, index, run_id):
     puppet_df = search_puppet(_es, INDEX, run_id)
     puppet_df["program"] = "puppet"
 
-    workspace = get_workspace_from_run_id(_es, index, run_id)
+    # run_id = github.run_id + "_" + workspace
+    workspace = run_id.split("_")[-1]
 
     df = pd.concat([terraform_df, puppet_df, cloudinit_df], ignore_index=True)
     df["run_id"] = run_id
