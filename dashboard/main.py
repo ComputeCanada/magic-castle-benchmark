@@ -340,12 +340,12 @@ def main():
 
         st.plotly_chart(fig)
 
-        runs = df.groupby(["run_id", "workspace"])["start"].min().reset_index()
+        runs = df[df['host'] == 'total'].reset_index()
         runs = runs.sort_values(["workspace", "start"])
         labels_to_run_id = {}
         for _, run in runs.iterrows():
             start_ = run['start'].strftime("%Y-%m-%d, %H:%M:%S UTC")
-            label = f"{run['workspace']} - {start_}"
+            label = f"{run['workspace']} - {start_} ({run['duration_s']}s)"
             labels_to_run_id[label] = run["run_id"]
         labels = st.multiselect(
             "Runs", labels_to_run_id.keys(), format_func=lambda x: f"{x}", default=None
