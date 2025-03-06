@@ -2,7 +2,6 @@ import argparse
 import datetime
 import logging
 import re
-import sys
 
 import pandas as pd
 import plotly.express as px
@@ -258,6 +257,9 @@ def check_failure(df):
     return result
 
 def draw_dashboard(df):
+    if df is None:
+        return
+
     workspaces = df['workspace'].unique()
     failed_runs = check_failure(df)
 
@@ -365,6 +367,9 @@ def main(load, save):
             df = pd.read_pickle('mcspeed.pickle')
         except:
             st.warning('Could not data')
+            df = None
+        else:
+            st.success("Loaded data from disk")
     else:
         es = st.session_state.get("es")
         if es is None:
@@ -382,8 +387,9 @@ def main(load, save):
                 return
 
             df = get_all_run(es, INDEX, run_ids)
-            if save:
-                df.to_pickle('mcspeed.pickle')
+
+    if save:
+        df.to_pickle('mcspeed.pickle')
 
     draw_dashboard(df)
 
