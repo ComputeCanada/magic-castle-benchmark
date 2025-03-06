@@ -246,14 +246,12 @@ def check_failure(df):
         return len(required_programs - set(programs)) > 0
 
     # Update duration_s and start based on missing programs
-    for _, group in df.groupby("run_id"):
+    for run_id, group in df.groupby("run_id"):
         if (
             group['errors'].sum() > 0 or
             has_missing_programs(group["program"].tolist())
         ):
-            start = group.iloc[0]["start"]
-            workspace = group["workspace"].unique()[0]
-            result.append((workspace, start))
+            result.append(run_id)
     return result
 
 def draw_dashboard(df):
@@ -284,32 +282,36 @@ def draw_dashboard(df):
         )
         df = df[(df["start"] >= date_range[0]) & (df["end"] <= date_range[1])]
         if df.empty:
-            st.warning("No runs in select date range")
+            st.warning("No runs in selected date range")
             return
 
     failed_runs = check_failure(df)
 
     total_mask = df["program"] == "total"
+    runs = df[total_mask].set_index('run_id')
+    runs = runs.sort_values(["workspace", "start"])
     fig = px.bar(
-        df[total_mask],
+        runs,
         x="start",
         y="duration_s",
         color="workspace",
         facet_col="workspace",
         labels={
+            "workspace": "Cloud",
             "start": "Date",
             "duration_s": "Duration (s)",
         },
-        hover_data=["run_id"],
     )
     fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1].title()))
 
     # Add a red "X" annotation on fail run
     map_facet = {x["name"]: f"x{i+1}" for i, x in enumerate(fig.data)}
-    for workspace, start in failed_runs:
+    for run_id in failed_runs:
+        run = runs.loc[run_id]
+        workspace = run['workspace']
         xref = map_facet[workspace]
         fig.add_annotation(
-            x=start,
+            x=run['start'],
             xref=xref,
             y=0,
             text="X",
@@ -319,13 +321,11 @@ def draw_dashboard(df):
 
     st.plotly_chart(fig)
 
-    runs = df[total_mask].reset_index()
-    runs = runs.sort_values(["workspace", "start"])
     labels_to_run_id = {}
-    for _, run in runs.iterrows():
+    for run_id, run in runs.iterrows():
         start_ = run['start'].strftime("%Y-%m-%d, %H:%M:%S UTC")
-        label = f"{run['workspace']} - {start_} ({run['duration_s']}s)"
-        labels_to_run_id[label] = run["run_id"]
+        label = f"{run['workspace']} - {start_} ({int(run['duration_s'])}s)"
+        labels_to_run_id[label] = run_id
 
     labels = st.multiselect(
         "Runs", labels_to_run_id.keys(), format_func=lambda x: f"{x}", default=None
