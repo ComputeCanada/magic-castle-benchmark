@@ -1,6 +1,5 @@
 import streamlit as st
 from opensearchpy import OpenSearch
-from requests.auth import HTTPBasicAuth
 import pandas as pd
 import datetime
 import re
