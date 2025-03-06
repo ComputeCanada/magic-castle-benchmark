@@ -9,6 +9,7 @@ from copy import deepcopy
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+logging.getLogger("opensearch").setLevel(logging.ERROR)
 
 INDEX = st.secrets.get("opensearch_index")
 MAX_HOST_NB = 20
@@ -109,6 +110,7 @@ def search_start_end(es, index, run_id, program):
     except Exception as e:
         logger.error(f"Error searching {program} logs: {e}")
         return pd.DataFrame()
+    logger.info(f"Search {program} start-end for {run_id} - {res['took'] / 1000.0}s")
 
     entries = []
     aggregations = res["aggregations"]
@@ -166,7 +168,7 @@ def search_puppet(es, index, run_id):
     except Exception as e:
         logger.error(f"Error searching puppet logs: {e}")
         return pd.DataFrame()
-
+    logger.info(f"Search puppet start-end for {run_id} - {res['took'] / 1000.0}s")
     entries = []
     for entry in res["aggregations"]["hosts"]["buckets"]:
         source = entry["first_applied_message"]["first_message"]["hits"]["hits"][0][
@@ -187,36 +189,39 @@ def search_puppet(es, index, run_id):
 
 @st.cache_data(ttl="1h")
 def get_run_ids(_es, index, limit=10):
-    try:
-        query = {
-            "size": 0,
-            "aggs": {
-                "unique_values": {
-                    "terms": {
-                        "field": "run_id.keyword",
-                        "size": limit,
-                        "order": {
-                            "first_event_occur": "desc"
-                        }
-                    },
-                    "aggs": {
-                        "first_event_occur": {
-                            "min": {
-                                "field": "@timestamp"
-                            }
+    query = {
+        "size": 0,
+        "aggs": {
+            "unique_values": {
+                "terms": {
+                    "field": "run_id.keyword",
+                    "size": limit,
+                    "order": {
+                        "first_event_occur": "desc"
+                    }
+                },
+                "aggs": {
+                    "first_event_occur": {
+                        "min": {
+                            "field": "@timestamp"
                         }
                     }
                 }
             }
         }
+    }
+
+    try:
         res = _es.search(index=index, body=query, request_timeout=30)
-        unique_values = [
-            bucket["key"] for bucket in res["aggregations"]["unique_values"]["buckets"]
-        ]
-        return unique_values
     except Exception as e:
         logger.error(f"Error listing unique values: {e}")
         return []
+    logger.info(f"Search last {limit} run ids - {res['took'] / 1000.0}s")
+    unique_values = [
+        bucket["key"] for bucket in res["aggregations"]["unique_values"]["buckets"]
+    ]
+    return unique_values
+
 
 @st.cache_data(ttl="1d")
 def get_single_run(_es, index, run_id):
