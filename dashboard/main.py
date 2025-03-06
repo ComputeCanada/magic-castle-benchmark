@@ -365,7 +365,7 @@ def main(load, save):
         try:
             df = pd.read_pickle('mcspeed.pickle')
         except:
-            st.warning('Could not data')
+            st.warning('Could not load data')
             df = None
         else:
             st.success("Loaded data from disk")
