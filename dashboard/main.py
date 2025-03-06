@@ -260,8 +260,7 @@ def draw_dashboard(df):
     if df is None:
         return
 
-    workspaces = df['workspace'].unique()
-    failed_runs = check_failure(df)
+    workspaces = sorted(df['workspace'].unique())
 
     with st.sidebar:
         workspaces_options = st.multiselect(
@@ -271,6 +270,9 @@ def draw_dashboard(df):
             format_func=lambda x: x.title(),
         )
         df = df[df["workspace"].isin(workspaces_options)]
+        if df.empty:
+            st.warning("Select at least one cloud")
+            return
 
         min_date = df["start"].min().to_pydatetime()
         max_date = df["end"].max().to_pydatetime()
@@ -281,18 +283,15 @@ def draw_dashboard(df):
             max_value=max_date,
         )
         df = df[(df["start"] >= date_range[0]) & (df["end"] <= date_range[1])]
+        if df.empty:
+            st.warning("No runs in select date range")
+            return
 
-    program_duration = (
-        df.groupby(["run_id", "program", "workspace"])["duration_s"]
-        .max()
-        .reset_index()
-    )
-    run_start = df.groupby(["run_id", "workspace"])["start"].min().reset_index()
-    result = pd.merge(program_duration, run_start, on=["run_id", "workspace"])
+    failed_runs = check_failure(df)
 
-    total_mask = result["program"] == "total"
+    total_mask = df["program"] == "total"
     fig = px.bar(
-        result[total_mask],
+        df[total_mask],
         x="start",
         y="duration_s",
         color="workspace",
@@ -300,7 +299,6 @@ def draw_dashboard(df):
         labels={
             "start": "Date",
             "duration_s": "Duration (s)",
-            "program": "Program",
         },
         hover_data=["run_id"],
     )
@@ -321,13 +319,14 @@ def draw_dashboard(df):
 
     st.plotly_chart(fig)
 
-    runs = df[df['host'] == 'total'].reset_index()
+    runs = df[total_mask].reset_index()
     runs = runs.sort_values(["workspace", "start"])
     labels_to_run_id = {}
     for _, run in runs.iterrows():
         start_ = run['start'].strftime("%Y-%m-%d, %H:%M:%S UTC")
         label = f"{run['workspace']} - {start_} ({run['duration_s']}s)"
         labels_to_run_id[label] = run["run_id"]
+
     labels = st.multiselect(
         "Runs", labels_to_run_id.keys(), format_func=lambda x: f"{x}", default=None
     )
