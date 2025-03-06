@@ -272,8 +272,8 @@ def draw_dashboard(df):
             st.warning("Select at least one cloud")
             return
 
-        min_date = df["start"].min().to_pydatetime()
-        max_date = df["end"].max().to_pydatetime()
+        min_date = datetime.datetime(*df["start"].min().to_pydatetime().timetuple()[:3], tzinfo=datetime.timezone.utc)
+        max_date = datetime.datetime(*df["end"].max().to_pydatetime().timetuple()[:3], tzinfo=datetime.timezone.utc) + datetime.timedelta(days=1)
         date_range = st.slider(
             "Date range",
             value=(min_date, max_date),
