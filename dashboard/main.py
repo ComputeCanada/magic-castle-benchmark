@@ -318,7 +318,7 @@ def main():
             facet_col="workspace",
             labels={
                 "start": "Date",
-                "duration_s": "Deployment duration (s)",
+                "duration_s": "Duration (s)",
                 "program": "Program",
             },
             hover_data=["run_id"],
