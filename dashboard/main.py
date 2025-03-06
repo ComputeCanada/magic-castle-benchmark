@@ -1,11 +1,16 @@
-import streamlit as st
-from opensearchpy import OpenSearch
-import pandas as pd
+import argparse
 import datetime
-import re
-import plotly.express as px
 import logging
+import re
+import sys
+
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+
 from copy import deepcopy
+
+from opensearchpy import OpenSearch
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -252,8 +257,100 @@ def check_failure(df):
             result.append((workspace, start))
     return result
 
+def draw_dashboard(df):
+    workspaces = df['workspace'].unique()
+    failed_runs = check_failure(df)
 
-def main():
+    with st.sidebar:
+        workspaces_options = st.multiselect(
+            "Clouds",
+            workspaces,
+            default=workspaces,
+            format_func=lambda x: x.title(),
+        )
+        df = df[df["workspace"].isin(workspaces_options)]
+
+        min_date = df["start"].min().to_pydatetime()
+        max_date = df["end"].max().to_pydatetime()
+        date_range = st.slider(
+            "Date range",
+            value=(min_date, max_date),
+            min_value=min_date,
+            max_value=max_date,
+        )
+        df = df[(df["start"] >= date_range[0]) & (df["end"] <= date_range[1])]
+
+    program_duration = (
+        df.groupby(["run_id", "program", "workspace"])["duration_s"]
+        .max()
+        .reset_index()
+    )
+    run_start = df.groupby(["run_id", "workspace"])["start"].min().reset_index()
+    result = pd.merge(program_duration, run_start, on=["run_id", "workspace"])
+
+    total_mask = result["program"] == "total"
+    fig = px.bar(
+        result[total_mask],
+        x="start",
+        y="duration_s",
+        color="workspace",
+        facet_col="workspace",
+        labels={
+            "start": "Date",
+            "duration_s": "Duration (s)",
+            "program": "Program",
+        },
+        hover_data=["run_id"],
+    )
+    fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1].title()))
+
+    # Add a red "X" annotation on fail run
+    map_facet = {x["name"]: f"x{i+1}" for i, x in enumerate(fig.data)}
+    for workspace, start in failed_runs:
+        xref = map_facet[workspace]
+        fig.add_annotation(
+            x=start,
+            xref=xref,
+            y=0,
+            text="X",
+            showarrow=False,
+            font=dict(color="red"),
+        )
+
+    st.plotly_chart(fig)
+
+    runs = df[df['host'] == 'total'].reset_index()
+    runs = runs.sort_values(["workspace", "start"])
+    labels_to_run_id = {}
+    for _, run in runs.iterrows():
+        start_ = run['start'].strftime("%Y-%m-%d, %H:%M:%S UTC")
+        label = f"{run['workspace']} - {start_} ({run['duration_s']}s)"
+        labels_to_run_id[label] = run["run_id"]
+    labels = st.multiselect(
+        "Runs", labels_to_run_id.keys(), format_func=lambda x: f"{x}", default=None
+    )
+    for label in labels:
+        run_id = labels_to_run_id[label]
+        df_single = df[df["run_id"] == run_id]
+
+        if not df_single.empty:
+            fig = px.timeline(
+                df_single,
+                x_start="start",
+                x_end="end",
+                y="host",
+                color="program",
+                category_orders={
+                    "program": ["total", "terraform", "cloudinit", "puppet"]
+                },
+                hover_data=["duration_s"],
+            )
+
+            fig.update_yaxes(autorange="reversed")
+            fig.update_layout(title=label)
+            st.plotly_chart(fig)
+
+def main(load, save):
     st.header("MCSpeed Dashboard")
 
     username = st.secrets.get("opensearch_username")
@@ -263,114 +360,37 @@ def main():
     headers = st.secrets.get("opensearch_headers")
     port = 443
 
-    es = st.session_state.get("es")
-    if es is None:
-        es = connect_to_opensearch(
-            username, password, host, port, url_prefix=url_prefix, headers=headers
-        )
-        st.success("Connected to OpenSearch")
-        st.session_state["es"] = es
-
-    if es:
-        run_ids = get_run_ids(es, INDEX)
-        if len(run_ids) == 0:
-            st.warning("No benchmark run found")
-            get_run_ids.clear()
-            return
-
-        df = get_all_run(es, INDEX, run_ids)
-        workspaces = df['workspace'].unique()
-        failed_runs = check_failure(df)
-
-        with st.sidebar:
-            workspaces_options = st.multiselect(
-                "Clouds",
-                workspaces,
-                default=workspaces,
-                format_func=lambda x: x.title(),
+    if load:
+        try:
+            df = pd.read_pickle('mcspeed.pickle')
+        except:
+            st.warning('Could not data')
+    else:
+        es = st.session_state.get("es")
+        if es is None:
+            es = connect_to_opensearch(
+                username, password, host, port, url_prefix=url_prefix, headers=headers
             )
-            df = df[df["workspace"].isin(workspaces_options)]
+            st.success("Connected to OpenSearch")
+            st.session_state["es"] = es
 
-            min_date = df["start"].min().to_pydatetime()
-            max_date = df["end"].max().to_pydatetime()
-            date_range = st.slider(
-                "Date range",
-                value=(min_date, max_date),
-                min_value=min_date,
-                max_value=max_date,
-            )
-            df = df[(df["start"] >= date_range[0]) & (df["end"] <= date_range[1])]
+        if es:
+            run_ids = get_run_ids(es, INDEX)
+            if len(run_ids) == 0:
+                st.warning("No benchmark run found")
+                get_run_ids.clear()
+                return
 
-        program_duration = (
-            df.groupby(["run_id", "program", "workspace"])["duration_s"]
-            .max()
-            .reset_index()
-        )
-        run_start = df.groupby(["run_id", "workspace"])["start"].min().reset_index()
-        result = pd.merge(program_duration, run_start, on=["run_id", "workspace"])
+            df = get_all_run(es, INDEX, run_ids)
+            if save:
+                df.to_pickle('mcspeed.pickle')
 
-        total_mask = result["program"] == "total"
-        fig = px.bar(
-            result[total_mask],
-            x="start",
-            y="duration_s",
-            color="workspace",
-            facet_col="workspace",
-            labels={
-                "start": "Date",
-                "duration_s": "Duration (s)",
-                "program": "Program",
-            },
-            hover_data=["run_id"],
-        )
-        fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1].title()))
-
-        # Add a red "X" annotation on fail run
-        map_facet = {x["name"]: f"x{i+1}" for i, x in enumerate(fig.data)}
-        for workspace, start in failed_runs:
-            xref = map_facet[workspace]
-            fig.add_annotation(
-                x=start,
-                xref=xref,
-                y=0,
-                text="X",
-                showarrow=False,
-                font=dict(color="red"),
-            )
-
-        st.plotly_chart(fig)
-
-        runs = df[df['host'] == 'total'].reset_index()
-        runs = runs.sort_values(["workspace", "start"])
-        labels_to_run_id = {}
-        for _, run in runs.iterrows():
-            start_ = run['start'].strftime("%Y-%m-%d, %H:%M:%S UTC")
-            label = f"{run['workspace']} - {start_} ({run['duration_s']}s)"
-            labels_to_run_id[label] = run["run_id"]
-        labels = st.multiselect(
-            "Runs", labels_to_run_id.keys(), format_func=lambda x: f"{x}", default=None
-        )
-        for label in labels:
-            run_id = labels_to_run_id[label]
-            df_single = df[df["run_id"] == run_id]
-
-            if not df_single.empty:
-                fig = px.timeline(
-                    df_single,
-                    x_start="start",
-                    x_end="end",
-                    y="host",
-                    color="program",
-                    category_orders={
-                        "program": ["total", "terraform", "cloudinit", "puppet"]
-                    },
-                    hover_data=["duration_s"],
-                )
-
-                fig.update_yaxes(autorange="reversed")
-                fig.update_layout(title=label)
-                st.plotly_chart(fig)
+    draw_dashboard(df)
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(prog='mcspeed')
+    parser.add_argument('--load', action='store_true')  # on/off flag
+    parser.add_argument('--save', action='store_true')  # on/off flag
+    args = parser.parse_args()
+    main(args.load, args.save)
