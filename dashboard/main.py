@@ -168,7 +168,7 @@ def search_puppet(es, index, run_id):
     return df
 
 @st.cache_data(ttl="1h")
-def get_run_ids(_es, index, limit=10):
+def get_run_ids(_es, index, limit=28):
     query = {
         "size": 0,
         "aggs": {
@@ -234,7 +234,7 @@ def get_all_run(es, index, run_ids):
     total_program["program"] = "total"
 
     df = pd.concat([df, total_program])
-    df["duration_s"] = (df["end"] - df["start"]).dt.total_seconds()
+    df["duration"] = df["end"] - df["start"]
     return df
 
 
@@ -245,7 +245,6 @@ def check_failure(df):
     def has_missing_programs(programs):
         return len(required_programs - set(programs)) > 0
 
-    # Update duration_s and start based on missing programs
     for run_id, group in df.groupby("run_id"):
         if (
             group['errors'].sum() > 0 or
@@ -290,18 +289,21 @@ def draw_dashboard(df):
     total_mask = df["program"] == "total"
     runs = df[total_mask].set_index('run_id')
     runs = runs.sort_values(["workspace", "start"])
+    runs.reset_index()
     fig = px.bar(
         runs,
         x="start",
-        y="duration_s",
+        y=runs["duration"] + pd.Timestamp("1970/01/01"),
         color="workspace",
         facet_col="workspace",
         labels={
             "workspace": "Cloud",
             "start": "Date",
-            "duration_s": "Duration (s)",
+            "y": "Duration",
         },
     )
+    fig.update_layout(yaxis_tickformat="%H:%M:%S")
+    fig.update_yaxes(hoverformat="%H:%M:%S")
     fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1].title()))
 
     # Add a red "X" annotation on fail run
@@ -313,7 +315,7 @@ def draw_dashboard(df):
         fig.add_annotation(
             x=run['start'],
             xref=xref,
-            y=0,
+            y=pd.Timestamp("1970/01/01"),
             text="X",
             showarrow=False,
             font=dict(color="red"),
@@ -322,9 +324,11 @@ def draw_dashboard(df):
     st.plotly_chart(fig)
 
     labels_to_run_id = {}
-    for run_id, run in runs.iterrows():
+    for i, (run_id, run) in enumerate(runs.iterrows()):
         start_ = run['start'].strftime("%Y-%m-%d, %H:%M:%S UTC")
-        label = f"{run['workspace']} - {start_} ({int(run['duration_s'])}s)"
+        import pdb; pdb.set_trace()
+        duration = run['duration'].strftime("%H:%M:%S")
+        label = f"{i+1}: {run['workspace']} - {start_} ({duration})"
         labels_to_run_id[label] = run_id
 
     labels = st.multiselect(
@@ -344,7 +348,7 @@ def draw_dashboard(df):
                 category_orders={
                     "program": ["total", "terraform", "cloudinit", "puppet"]
                 },
-                hover_data=["duration_s"],
+                hover_data=["duration"],
             )
 
             fig.update_yaxes(autorange="reversed")
@@ -389,7 +393,6 @@ def main(load, save):
 
     if save:
         df.to_pickle('mcspeed.pickle')
-
     draw_dashboard(df)
 
 
