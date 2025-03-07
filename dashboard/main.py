@@ -326,7 +326,7 @@ def draw_dashboard(df):
     labels_to_run_id = {}
     for i, (run_id, run) in enumerate(runs.iterrows()):
         start_ = run['start'].strftime("%Y-%m-%d, %H:%M:%S UTC")
-        duration = run['duration'].strftime("%H:%M:%S")
+        duration = "{1:02}:{2:02}:{3:02}".format(*run['duration'].components)
         label = f"{i+1}: {run['workspace']} - {start_} ({duration})"
         labels_to_run_id[label] = run_id
 
