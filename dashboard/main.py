@@ -28,7 +28,7 @@ START_END_QUERIES = {
         "query": {
             "bool": {
                 "must": [
-                    {"match": {"program": "terraform"}},
+                    {"term": {"program.keyword": "terraform"}},
                     {"range": {"@timestamp": {"gte": "now/y", "lt": "now+1y/y"}}},
                 ]
             }
@@ -46,7 +46,7 @@ START_END_QUERIES = {
         "query": {
             "bool": {
                 "must": [
-                    {"match": {"program": "cloud-init"}},
+                    {"term": {"program.keyword": "cloud-init"}},
                     {"range": {"@timestamp": {"gte": "now/y", "lt": "now+1y/y"}}},
                 ]
             }
@@ -118,8 +118,8 @@ def search_puppet(es, index, run_id):
         "query": {
             "bool": {
                 "filter": [
-                    {"match": {"run_id": run_id}},
-                    {"match": {"program": "puppet-agent"}},
+                    {"term": {"run_id.keyword": run_id}},
+                    {"term": {"program.keyword": "puppet-agent"}},
                     {"range": {"@timestamp": {"gte": "now/y", "lt": "now+1y/y"}}},
                 ]
             }
