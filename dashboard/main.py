@@ -150,9 +150,11 @@ def search_puppet(es, index, run_id):
     logger.info(f"Search puppet start-end for {run_id} - {res['took'] / 1000.0}s")
     entries = []
     for entry in res["aggregations"]["hosts"]["buckets"]:
-        source = entry["first_applied_message"]["first_message"]["hits"]["hits"][0][
-            "_source"
-        ]
+        hits = entry["first_applied_message"]["first_message"]["hits"]["hits"]
+        if len(hits) == 0:
+            continue
+
+        source = hits[0]["_source"]
         message = source["message"]
         host = source["host"]
         match = re.search(PUPPET_DURATION_REGEX, message)
