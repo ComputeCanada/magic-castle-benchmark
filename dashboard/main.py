@@ -65,7 +65,7 @@ START_END_QUERIES = {
 
 def connect_to_opensearch(username, password, host, port, url_prefix=None, headers={}):
     try:
-        es = OpenSearch(
+        return OpenSearch(
             hosts=[{"host": host, "port": port}],
             http_compress=True,
             http_auth=(username, password),
@@ -73,7 +73,6 @@ def connect_to_opensearch(username, password, host, port, url_prefix=None, heade
             url_prefix=url_prefix,
             headers=headers,
         )
-        return es
     except Exception as e:
         logger.error(f"Error connecting to OpenSearch: {e}")
         st.error(
@@ -108,8 +107,8 @@ def search_start_end(es, index, run_id, program):
             entries.append({"host": None, "start": start, "end": end, "errors": errors})
         except:
             return pd.DataFrame()
-    df = pd.DataFrame(entries)
-    return df
+
+    return pd.DataFrame(entries)
 
 
 def search_puppet(es, index, run_id):
@@ -164,8 +163,7 @@ def search_puppet(es, index, run_id):
             start = end - delta
             entries.append({"host": host, "start": start, "end": end, "errors": 0})
 
-    df = pd.DataFrame(entries)
-    return df
+    return pd.DataFrame(entries)
 
 @st.cache_data(ttl="1h")
 def get_run_ids(_es, index, limit=28):
@@ -197,10 +195,8 @@ def get_run_ids(_es, index, limit=28):
         logger.error(f"Error listing unique values: {e}")
         return []
     logger.info(f"Search last {limit} run ids - {res['took'] / 1000.0}s")
-    unique_values = [
-        bucket["key"] for bucket in res["aggregations"]["unique_values"]["buckets"]
-    ]
-    return unique_values
+
+    return [bucket["key"] for bucket in res["aggregations"]["unique_values"]["buckets"]]
 
 
 @st.cache_data(ttl="1d")
