@@ -2,8 +2,8 @@ name: Terraform Apply Cron Daily
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Midnight UTC. Must match with destroy
-    - cron: '0 12 * * *'
+    - cron: '22 3 * * *' # 3:22 UTC. Must match with destroy
+    - cron: '22 15 * * *'
   push:
     tags:
       - daily_apply

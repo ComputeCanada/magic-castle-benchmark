@@ -2,8 +2,8 @@ name: Terraform Destroy Cron Daily
 
 on:
   schedule:
-    - cron: '0 2 * * *' # Must match with apply +1h
-    - cron: '0 14 * * *' # Must match with apply +1h
+    - cron: '22 6 * * *' # Must match with apply +3h
+    - cron: '22 18 * * *' # Must match with apply +3h
   push:
     tags:
       - daily_destroy
