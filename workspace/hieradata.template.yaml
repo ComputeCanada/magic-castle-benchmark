@@ -19,7 +19,8 @@ profile::vector::config: |
       data_dir: /var/lib/vector
       include_units: ["puppet.service"]
       since_now: False
-      include_matches.PRIORITY: ["0", "1", "2", "3", "4", "5"]
+      exclude_matches
+        PRIORITY: ["6", "7"]
     cloud_init:
       type: file
       include:
