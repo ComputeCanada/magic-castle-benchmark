@@ -7,6 +7,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from collections import defaultdict
 from copy import deepcopy
 
 from opensearchpy import OpenSearch
@@ -137,6 +138,17 @@ def search_puppet(es, index, run_id):
                                 }
                             }
                         },
+                    },
+                    "failure": {
+                        "filter": {"match": {"message": "failed"}},
+                        "aggs": {
+                            "last_failure": {
+                                "top_hits": {
+                                    "size": 30,
+                                    "sort": [{"@timestamp": "desc"}],
+                                }
+                            }
+                        },
                     }
                 },
             }
@@ -163,7 +175,23 @@ def search_puppet(es, index, run_id):
             delta = datetime.timedelta(seconds=duration)
             end = pd.to_datetime(source["@timestamp"])
             start = end - delta
-            entries.append({"host": host, "start": start, "end": end, "errors": 0})
+
+        errors = 0
+        if entry['failure']['doc_count'] > 0:
+            hits = entry['failure']['last_failure']['hits']['hits']
+            puppet_errors = defaultdict(list)
+            for hit in hits:
+                message = hit['_source']['message']
+                if message.startswith('(/Stage[main]'):
+                    key = message[message.find("(")+1:message.find(")")]
+                    puppet_errors[key].append(message)
+            unique_err = puppet_errors.keys()
+            errors = len(unique_err)
+            # if errors > 0:
+                # print(host, unique_err)
+                # import pdb; pdb.set_trace()
+
+        entries.append({"host": host, "start": start, "end": end, "errors": errors})
 
     return pd.DataFrame(entries)
 
@@ -345,7 +373,7 @@ def draw_dashboard(df):
                 category_orders={
                     "program": ["total", "terraform", "cloudinit", "puppet"]
                 },
-                hover_data=["duration"],
+                hover_data=["errors"],
             )
 
             fig.update_yaxes(autorange="reversed")
