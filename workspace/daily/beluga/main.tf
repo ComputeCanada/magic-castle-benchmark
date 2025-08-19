@@ -31,6 +31,7 @@ module "openstack" {
   ]
 
   hieradata = file("./hieradata.yaml")
+  subnet_id = "f7412a24-e802-4a72-8e1f-f74bac4a0b5a"
 
   nb_users = 10
   # Shared password, randomly chosen if blank
