@@ -30,6 +30,9 @@ module "openstack" {
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBblyJ+6JynjS7kxzawodNvRrOTGVGj7266zcFJuq01N felix"
   ]
 
+
+  os_ext_network = "Public-Network"
+
   hieradata = file("./hieradata.yaml")
 
   nb_users = 10
