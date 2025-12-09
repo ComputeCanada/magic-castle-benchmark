@@ -83,7 +83,7 @@ def connect_to_opensearch(username, password, host, port, url_prefix=None, heade
 
 def search_start_end(es, index, run_id, program):
     body = deepcopy(START_END_QUERIES[program])
-    body["query"]["bool"]["must"].append({"match" : {"run_id" :  run_id}})
+    body["query"]["bool"]["must"].append({"match_phrase" : {"run_id" :  run_id}})
 
     try:
         res = es.search(index=f"{index}", body=body, request_timeout=30)
