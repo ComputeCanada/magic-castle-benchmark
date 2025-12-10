@@ -79,10 +79,9 @@ def connect_to_opensearch(username, password, host, port, url_prefix=None, heade
         )
         return None
 
-def search_start_end(es, index, run_id, program, window):
+def search_start_end(es, index, run_id, program):
     body = deepcopy(START_END_QUERIES[program])
     body["query"]["bool"]["filter"].append({"term" : {"run_id.keyword" :  run_id}})
-    body["query"]["bool"]["filter"].append({"range": {"@timestamp": {"lte": "now", "gt": f"now-{window}"}}})
 
     try:
         res = es.search(index=f"{index}", body=body, request_timeout=30)
@@ -111,7 +110,7 @@ def search_start_end(es, index, run_id, program, window):
     return pd.DataFrame(entries)
 
 
-def search_puppet(es, index, run_id, window):
+def search_puppet(es, index, run_id):
     body = {
         "size": 0,
         "query": {
@@ -119,7 +118,6 @@ def search_puppet(es, index, run_id, window):
                 "filter": [
                     {"term": {"run_id.keyword": run_id}},
                     {"term": {"program.keyword": "puppet-agent"}},
-                    {"range": {"@timestamp": {"lte": "now", "gt": f"now-{window}"}}},
                 ]
             }
         },
@@ -237,13 +235,13 @@ def get_run_ids(_es, index, window):
 
 
 @st.cache_data(ttl="1d")
-def get_single_run(_es, index, run_id, window):
-    terraform_df = search_start_end(_es, f"{index}", run_id, "terraform", window)
+def get_single_run(_es, index, run_id):
+    terraform_df = search_start_end(_es, f"{index}", run_id, "terraform")
     terraform_df["program"] = "terraform"
     terraform_df["host"] = "terraform"
-    cloudinit_df = search_start_end(_es, f"{index}", run_id, "cloud-init", window)
+    cloudinit_df = search_start_end(_es, f"{index}", run_id, "cloud-init")
     cloudinit_df["program"] = "cloudinit"
-    puppet_df = search_puppet(_es, INDEX, run_id, window)
+    puppet_df = search_puppet(_es, INDEX, run_id)
     puppet_df["program"] = "puppet"
 
     # run_id = github.run_id + "_" + workspace
@@ -254,8 +252,8 @@ def get_single_run(_es, index, run_id, window):
     df["workspace"] = workspace
     return df
 
-def get_all_run(es, index, run_ids, window):
-    dfs = [get_single_run(es, index, run_id, window) for run_id in run_ids]
+def get_all_run(es, index, run_ids):
+    dfs = [get_single_run(es, index, run_id) for run_id in run_ids]
     df = pd.concat(dfs)
 
     total_program = (
@@ -421,7 +419,7 @@ def main(load, save, window):
                 get_run_ids.clear()
                 return
 
-            df = get_all_run(es, INDEX, run_ids, window)
+            df = get_all_run(es, INDEX, run_ids)
 
     if save:
         df.to_pickle('mcspeed.pickle')
