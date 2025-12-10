@@ -28,9 +28,8 @@ START_END_QUERIES = {
         "size": 0,
         "query": {
             "bool": {
-                "must": [
+                "filter": [
                     {"term": {"program.keyword": "terraform"}},
-                    {"range": {"@timestamp": {"gte": "now/y", "lt": "now+1y/y"}}},
                 ]
             }
         },
@@ -46,9 +45,8 @@ START_END_QUERIES = {
         "size": 0,
         "query": {
             "bool": {
-                "must": [
+                "filter": [
                     {"term": {"program.keyword": "cloud-init"}},
-                    {"range": {"@timestamp": {"gte": "now/y", "lt": "now+1y/y"}}},
                 ]
             }
         },
@@ -81,9 +79,10 @@ def connect_to_opensearch(username, password, host, port, url_prefix=None, heade
         )
         return None
 
-def search_start_end(es, index, run_id, program):
+def search_start_end(es, index, run_id, program, window):
     body = deepcopy(START_END_QUERIES[program])
-    body["query"]["bool"]["must"].append({"match_phrase" : {"run_id" :  run_id}})
+    body["query"]["bool"]["filter"].append({"term" : {"run_id.keyword" :  run_id}})
+    body["query"]["bool"]["filter"].append({"range": {"@timestamp": {"lte": "now", "gt": f"now-{window}"}}})
 
     try:
         res = es.search(index=f"{index}", body=body, request_timeout=30)
@@ -112,7 +111,7 @@ def search_start_end(es, index, run_id, program):
     return pd.DataFrame(entries)
 
 
-def search_puppet(es, index, run_id):
+def search_puppet(es, index, run_id, window):
     body = {
         "size": 0,
         "query": {
@@ -120,13 +119,13 @@ def search_puppet(es, index, run_id):
                 "filter": [
                     {"term": {"run_id.keyword": run_id}},
                     {"term": {"program.keyword": "puppet-agent"}},
-                    {"range": {"@timestamp": {"gte": "now/y", "lt": "now+1y/y"}}},
+                    {"range": {"@timestamp": {"lte": "now", "gt": f"now-{window}"}}},
                 ]
             }
         },
         "aggs": {
             "hosts": {
-                "terms": {"field": "host.keyword", "size": 10},
+                "terms": {"field": "host.keyword", "size": MAX_HOST_NB},
                 "aggs": {
                     "first_applied_message": {
                         "filter": {"match": {"message": "Applied"}},
@@ -196,14 +195,21 @@ def search_puppet(es, index, run_id):
     return pd.DataFrame(entries)
 
 @st.cache_data(ttl="1h")
-def get_run_ids(_es, index, limit=28):
+def get_run_ids(_es, index, window):
     query = {
         "size": 0,
+        "query": {
+            "bool": {
+                "filter": [
+                    {"range": {"@timestamp": {"lte": "now", "gt": f"now-{window}"}}},
+                ]
+            }
+        },
         "aggs": {
             "unique_values": {
                 "terms": {
                     "field": "run_id.keyword",
-                    "size": limit,
+                    "size": 100,
                     "order": {
                         "first_event_occur": "desc"
                     }
@@ -224,19 +230,20 @@ def get_run_ids(_es, index, limit=28):
     except Exception as e:
         logger.error(f"Error listing unique values: {e}")
         return []
-    logger.info(f"Search last {limit} run ids - {res['took'] / 1000.0}s")
+    result = [bucket["key"] for bucket in res["aggregations"]["unique_values"]["buckets"]]
+    logger.info(f"Search last {len(result)} run ids - {res['took'] / 1000.0}s")
 
-    return [bucket["key"] for bucket in res["aggregations"]["unique_values"]["buckets"]]
+    return result
 
 
 @st.cache_data(ttl="1d")
-def get_single_run(_es, index, run_id):
-    terraform_df = search_start_end(_es, f"{index}", run_id, "terraform")
+def get_single_run(_es, index, run_id, window):
+    terraform_df = search_start_end(_es, f"{index}", run_id, "terraform", window)
     terraform_df["program"] = "terraform"
     terraform_df["host"] = "terraform"
-    cloudinit_df = search_start_end(_es, f"{index}", run_id, "cloud-init")
+    cloudinit_df = search_start_end(_es, f"{index}", run_id, "cloud-init", window)
     cloudinit_df["program"] = "cloudinit"
-    puppet_df = search_puppet(_es, INDEX, run_id)
+    puppet_df = search_puppet(_es, INDEX, run_id, window)
     puppet_df["program"] = "puppet"
 
     # run_id = github.run_id + "_" + workspace
@@ -247,8 +254,8 @@ def get_single_run(_es, index, run_id):
     df["workspace"] = workspace
     return df
 
-def get_all_run(es, index, run_ids):
-    dfs = [get_single_run(es, index, run_id) for run_id in run_ids]
+def get_all_run(es, index, run_ids, window):
+    dfs = [get_single_run(es, index, run_id, window) for run_id in run_ids]
     df = pd.concat(dfs)
 
     total_program = (
@@ -380,7 +387,7 @@ def draw_dashboard(df):
             fig.update_layout(title=label)
             st.plotly_chart(fig)
 
-def main(load, save):
+def main(load, save, window):
     st.header("MCSpeed Dashboard")
 
     username = st.secrets.get("opensearch_username")
@@ -408,13 +415,13 @@ def main(load, save):
             st.session_state["es"] = es
 
         if es:
-            run_ids = get_run_ids(es, INDEX)
+            run_ids = get_run_ids(es, INDEX, window)
             if len(run_ids) == 0:
                 st.warning("No benchmark run found")
                 get_run_ids.clear()
                 return
 
-            df = get_all_run(es, INDEX, run_ids)
+            df = get_all_run(es, INDEX, run_ids, window)
 
     if save:
         df.to_pickle('mcspeed.pickle')
@@ -425,5 +432,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog='mcspeed')
     parser.add_argument('--load', action='store_true')  # on/off flag
     parser.add_argument('--save', action='store_true')  # on/off flag
+    parser.add_argument('--window', default='7d')
     args = parser.parse_args()
-    main(args.load, args.save)
+    main(args.load, args.save, args.window)
