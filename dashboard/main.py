@@ -126,7 +126,7 @@ def search_puppet(es, index, run_id):
                 "terms": {"field": "host.keyword", "size": MAX_HOST_NB},
                 "aggs": {
                     "first_applied_message": {
-                        "filter": {"match": {"message": "Applied"}},
+                        "filter": {"match_phrase": {"message": "Applied catalog in"}},
                         "aggs": {
                             "first_message": {
                                 "top_hits": {
@@ -137,12 +137,21 @@ def search_puppet(es, index, run_id):
                         },
                     },
                     "failure": {
-                        "filter": {"match": {"message": "failed"}},
+                        "filter": {
+                            "bool": {
+                                "must": [{"match": {"message": "failed"}}],
+                                "must_not": [
+                                    {"match_phrase": {"message": "Skipping because of failed dependencies"}},
+                                    {"match_phrase": {"message": "Connection to https"}},
+                                    {"match_phrase": {"message": "Failed to open TCP connection to"}},
+                                ],
+                            },
+                        },
                         "aggs": {
-                            "last_failure": {
+                            "first_failure": {
                                 "top_hits": {
-                                    "size": 30,
-                                    "sort": [{"@timestamp": "desc"}],
+                                    "size": 100,
+                                    "sort": [{"@timestamp": "asc"}],
                                 }
                             }
                         },
@@ -174,21 +183,26 @@ def search_puppet(es, index, run_id):
             start = end - delta
 
         errors = 0
+        error_messages = []
         if entry['failure']['doc_count'] > 0:
-            hits = entry['failure']['last_failure']['hits']['hits']
+            hits = entry['failure']['first_failure']['hits']['hits']
             puppet_errors = defaultdict(list)
             for hit in hits:
                 message = hit['_source']['message']
+                timestamp = hit['_source']['@timestamp']
                 if message.startswith('(/Stage[main]'):
                     key = message[message.find("(")+1:message.find(")")]
-                    puppet_errors[key].append(message)
-            unique_err = puppet_errors.keys()
-            errors = len(unique_err)
-            # if errors > 0:
-                # print(host, unique_err)
-                # import pdb; pdb.set_trace()
+                    puppet_errors[key].append((timestamp, message))
+            error_messages = [msg_tuple for msgs in puppet_errors.values() for msg_tuple in msgs]
+            errors = len(puppet_errors.keys())
 
-        entries.append({"host": host, "start": start, "end": end, "errors": errors})
+        entries.append({
+            "host": host,
+            "start": start,
+            "end": end,
+            "errors": errors,
+            "error_messages": error_messages,
+        })
 
     return pd.DataFrame(entries)
 
@@ -384,6 +398,26 @@ def draw_dashboard(df):
             fig.update_yaxes(autorange="reversed")
             fig.update_layout(title=label)
             st.plotly_chart(fig)
+
+            puppet_errors = df_single[
+                (df_single["program"] == "puppet") & (df_single["errors"] > 0)
+            ]
+            if not puppet_errors.empty:
+                st.error("Puppet errors detected")
+                puppet_error_table = defaultdict(list)
+                for _, row in puppet_errors.iterrows():
+                    host = row['host']
+                    for timestamp, message in row["error_messages"]:
+                        puppet_error_table["host"].append(host)
+                        puppet_error_table["timestamp"].append(timestamp)
+                        resource = message[message.find("(")+1:message.find(")")]
+                        if resource:
+                            _, _, class_, resource = resource.split('/', 3)
+                            puppet_error_table['class'].append(class_.lower())
+                            puppet_error_table["resource"].append(resource)
+                            message = message[message.find(")")+1:]
+                        puppet_error_table["message"].append(message)
+                st.dataframe(puppet_error_table, hide_index=True)
 
 def main(load, save, window):
     st.header("MCSpeed Dashboard")
