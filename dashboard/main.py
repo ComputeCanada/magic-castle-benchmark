@@ -375,9 +375,19 @@ def draw_dashboard(df):
         label = f"{i+1}: {run['workspace']} - {start_} ({duration})"
         labels_to_run_id[label] = run_id
 
+    st.markdown("### Successful run statistics")
+
+    duration = runs[['workspace', 'duration']]
+    duration = duration[runs['errors'] == 0]
+    duration['duration'] = duration['duration'].dt.total_seconds() / 60.
+    duration = duration.groupby('workspace')
+    st.dataframe(duration['duration'].describe().round(2))
+
+    st.markdown("### Runs")
     labels = st.multiselect(
         "Runs", labels_to_run_id.keys(), format_func=lambda x: f"{x}", default=None
     )
+
     for label in labels:
         run_id = labels_to_run_id[label]
         df_single = df[df["run_id"] == run_id]
