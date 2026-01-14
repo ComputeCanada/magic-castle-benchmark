@@ -221,7 +221,7 @@ def get_run_ids(_es, index, window):
             "unique_values": {
                 "terms": {
                     "field": "run_id.keyword",
-                    "size": 100,
+                    "size": 500,
                     "order": {
                         "first_event_occur": "desc"
                     }
@@ -377,8 +377,8 @@ def draw_dashboard(df):
 
     st.markdown("### Successful run statistics")
 
-    duration = runs[['workspace', 'duration']]
-    duration = duration[runs['errors'] == 0]
+    successful_runs = runs.drop(runs.loc[failed_runs].index)
+    duration = successful_runs[['workspace', 'duration']]
     duration['duration'] = duration['duration'].dt.total_seconds() / 60.
     duration = duration.groupby('workspace')
     st.dataframe(duration['duration'].describe().round(2))
