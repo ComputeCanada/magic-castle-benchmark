@@ -372,7 +372,8 @@ def draw_dashboard(df):
     for i, (run_id, run) in enumerate(runs.iterrows()):
         start_ = run['start'].strftime("%Y-%m-%d, %H:%M:%S UTC")
         duration = "{1:02}:{2:02}:{3:02}".format(*run['duration'].components)
-        label = f"{i+1}: {run['workspace']} - {start_} ({duration})"
+        has_failed = run_id in failed_runs
+        label = f"{i+1}: {run['workspace']} - {start_} ({duration})" + ( " FAILED" if has_failed else "" )
         labels_to_run_id[label] = run_id
 
     st.markdown("### Successful run statistics")
