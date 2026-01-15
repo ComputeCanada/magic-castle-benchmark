@@ -10,10 +10,14 @@ env:
   OPENSEARCH_USERNAME: "${{ vars.OPENSEARCH_USERNAME }}"
   OPENSEARCH_URL: "${{ vars.OPENSEARCH_URL }}"
   OPENSEARCH_INDEX: "${{ vars.OPENSEARCH_INDEX }}"
+  OPENSEARCH_CF_CLIENT: "${{ vars.OPENSEARCH_CF_CLIENT }}"
+  OPENSEARCH_CF_SECRET: "${{ secrets.OPENSEARCH_CF_SECRET }}"
 
 jobs:
   setup:
     uses: ./.github/workflows/setup.yaml
+    with:
+      subfolder: "daily"
   terraform:
     name: "Terraform Plan"
     needs: setup
@@ -22,7 +26,7 @@ jobs:
         workspace: ${{ fromJson(needs.setup.outputs.workspaces) }}
     env:
       TF_WORKSPACE: "${{ matrix.workspace }}"
-      CONFIG_DIRECTORY: "./workspace/${{  matrix.workspace }}"
+      CONFIG_DIRECTORY: "./workspace/daily/${{  matrix.workspace }}"
       RUN_ID: "${{ github.run_id }}_${{ matrix.workspace }}"
     runs-on: ubuntu-latest
     permissions:
@@ -35,7 +39,7 @@ jobs:
       - name: envsubst
         uses: danielr1996/envsubst-action@1.0.0
         with:
-          input: "${{ env.CONFIG_DIRECTORY }}/../hieradata.template.yaml"
+          input: "./workspace/hieradata.template.yaml"
           output: "${{ env.CONFIG_DIRECTORY }}/hieradata.yaml"
       - name: Upload Configuration
         uses: hashicorp/tfc-workflows-github/actions/upload-configuration@v1.0.0

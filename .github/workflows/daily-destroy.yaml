@@ -1,0 +1,16 @@
+name: Terraform Destroy Cron Daily
+
+on:
+  schedule:
+    - cron: '22 6 * * *' # Must match with apply +3h
+    - cron: '22 18 * * *' # Must match with apply +3h
+  push:
+    tags:
+      - daily_destroy
+
+jobs:
+  destroy:
+    uses: ./.github/workflows/terraform-destroy.yaml
+    with:
+      subfolder: "daily"
+    secrets: inherit

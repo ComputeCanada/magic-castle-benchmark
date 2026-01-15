@@ -5,10 +5,12 @@ magic_castle::site::all:
   - profile::freeipa
   - profile::users::local
   - profile::sssd::client
-  - profile::metrics::node_exporter
+  - profile::prometheus::node_exporter
   - profile::rsyslog::client
+  - profile::volumes
   - swap_file
   - profile::vector
+  - profile::mail
 
 
 profile::vector::access_var_log: true
@@ -19,6 +21,8 @@ profile::vector::config: |
       data_dir: /var/lib/vector
       include_units: ["puppet.service"]
       since_now: False
+      exclude_matches:
+        PRIORITY: ["6", "7"]
     cloud_init:
       type: file
       include:
@@ -83,12 +87,18 @@ profile::vector::config: |
         - to_elastic_format
       endpoints:
         - "$OPENSEARCH_URL"
+      api_version: "v8"
       auth:
         strategy: basic
         user: "$OPENSEARCH_USERNAME"
         password: "$OPENSEARCH_PASSWORD"
       bulk:
+        action: "create"
         index: "${OPENSEARCH_INDEX}"
+      request:
+        headers:
+          CF-Access-Client-Id: "$OPENSEARCH_CF_CLIENT"
+          CF-Access-Client-Secret: "$OPENSEARCH_CF_SECRET"
     output_console:
       type: console
       inputs: [to_elastic_format]

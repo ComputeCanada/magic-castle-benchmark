@@ -1,0 +1,12 @@
+name: Terraform Apply Cron Weekly
+
+on:
+  schedule:
+    - cron: '0 0 * * 0' # Midnight UTC. Must match with destroy
+
+jobs:
+  apply:
+    uses: ./.github/workflows/terraform-apply.yaml
+    with:
+      subfolder: "weekly"
+    secrets: inherit

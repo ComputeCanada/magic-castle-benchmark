@@ -8,4 +8,6 @@ on:
 jobs:
   destroy-staging:
     uses: ./.github/workflows/terraform-destroy.yaml
+    with:
+      subfolder: "daily"
     secrets: inherit

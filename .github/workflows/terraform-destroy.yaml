@@ -2,6 +2,10 @@ name: Terraform Destroy
 
 on:
   workflow_call:
+    inputs:
+      subfolder:
+        type: string
+        required: true
 
 env:
   TF_CLOUD_ORGANIZATION: "${{ vars.TF_CLOUD_ORGANIZATION }}"
@@ -10,6 +14,8 @@ env:
 jobs:
   setup:
     uses: ./.github/workflows/setup.yaml
+    with:
+      subfolder: "${{ inputs.subfolder }}"
   terraform:
     name: "Terraform Destroy"
     needs: setup
@@ -19,8 +25,8 @@ jobs:
         workspace: ${{ fromJson(needs.setup.outputs.workspaces) }}
     env:
       TF_WORKSPACE: "${{ matrix.workspace }}"
-      CONFIG_DIRECTORY: "./workspace/${{  matrix.workspace }}"
-    runs-on: ubuntu-latest
+      CONFIG_DIRECTORY: "./workspace/${{ inputs.subfolder }}/${{  matrix.workspace }}"
+    runs-on: [self-hosted]
     permissions:
       contents: read
     steps:
