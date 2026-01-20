@@ -8,7 +8,6 @@ import plotly.express as px
 import streamlit as st
 
 from collections import defaultdict
-from copy import deepcopy
 
 from opensearchpy import OpenSearch
 
@@ -17,50 +16,17 @@ logger = logging.getLogger(__name__)
 logging.getLogger("opensearch").setLevel(logging.ERROR)
 
 INDEX = st.secrets.get("opensearch_index")
-MAX_HOST_NB = 20
 
 PUPPET_DURATION_REGEX = r"\d+(\.\d+)?"
 
 pd.options.mode.copy_on_write = True
 
-START_END_QUERIES = {
-    "terraform": {
-        "size": 0,
-        "query": {
-            "bool": {
-                "filter": [
-                    {"term": {"program.keyword": "terraform"}},
-                ]
-            }
-        },
-        "aggs": {
-            "max_timestamp": {"max": {"field": "@timestamp"}},
-            "min_timestamp": {"min": {"field": "@timestamp"}},
-            "log_level": {
-                "terms": {"field": "@level.keyword", "size": 5},
-            }
-        },
-    },
-    "cloud-init": {
-        "size": 0,
-        "query": {
-            "bool": {
-                "filter": [
-                    {"term": {"program.keyword": "cloud-init"}},
-                ]
-            }
-        },
-        "aggs": {
-            "hosts": {
-                "terms": {"field": "host.keyword", "size": MAX_HOST_NB},
-                "aggs": {
-                    "max_timestamp": {"max": {"field": "@timestamp"}},
-                    "min_timestamp": {"min": {"field": "@timestamp"}},
-                },
-            },
-        },
-    },
-}
+from opensearch_queries import (
+    build_terraform_query,
+    build_cloud_init_query,
+    build_puppet_query,
+    build_run_ids_query,
+)
 
 def connect_to_opensearch(username, password, host, port, url_prefix=None, headers={}):
     try:
@@ -80,8 +46,13 @@ def connect_to_opensearch(username, password, host, port, url_prefix=None, heade
         return None
 
 def search_start_end(es, index, run_id, program):
-    body = deepcopy(START_END_QUERIES[program])
-    body["query"]["bool"]["filter"].append({"term" : {"run_id.keyword" :  run_id}})
+    if program == "terraform":
+        body = build_terraform_query(run_id)
+    elif program == "cloud-init":
+        body = build_cloud_init_query(run_id)
+    else:
+        logger.error(f"Unknown program: {program}")
+        return pd.DataFrame()
 
     try:
         res = es.search(index=f"{index}", body=body, request_timeout=30)
@@ -111,55 +82,7 @@ def search_start_end(es, index, run_id, program):
 
 
 def search_puppet(es, index, run_id):
-    body = {
-        "size": 0,
-        "query": {
-            "bool": {
-                "filter": [
-                    {"term": {"run_id.keyword": run_id}},
-                    {"term": {"program.keyword": "puppet-agent"}},
-                ]
-            }
-        },
-        "aggs": {
-            "hosts": {
-                "terms": {"field": "host.keyword", "size": MAX_HOST_NB},
-                "aggs": {
-                    "first_applied_message": {
-                        "filter": {"match_phrase": {"message": "Applied catalog in"}},
-                        "aggs": {
-                            "first_message": {
-                                "top_hits": {
-                                    "size": 1,
-                                    "sort": [{"@timestamp": "asc"}],
-                                }
-                            }
-                        },
-                    },
-                    "failure": {
-                        "filter": {
-                            "bool": {
-                                "must": [{"match": {"message": "failed"}}],
-                                "must_not": [
-                                    {"match_phrase": {"message": "Skipping because of failed dependencies"}},
-                                    {"match_phrase": {"message": "Connection to https"}},
-                                    {"match_phrase": {"message": "Failed to open TCP connection to"}},
-                                ],
-                            },
-                        },
-                        "aggs": {
-                            "first_failure": {
-                                "top_hits": {
-                                    "size": 100,
-                                    "sort": [{"@timestamp": "asc"}],
-                                }
-                            }
-                        },
-                    }
-                },
-            }
-        },
-    }
+    body = build_puppet_query(run_id)
     try:
         res = es.search(index=f"{index}", body=body, request_timeout=30)
     except Exception as e:
@@ -208,34 +131,7 @@ def search_puppet(es, index, run_id):
 
 @st.cache_data(ttl="1h")
 def get_run_ids(_es, index, window):
-    query = {
-        "size": 0,
-        "query": {
-            "bool": {
-                "filter": [
-                    {"range": {"@timestamp": {"lte": "now", "gt": f"now-{window}"}}},
-                ]
-            }
-        },
-        "aggs": {
-            "unique_values": {
-                "terms": {
-                    "field": "run_id.keyword",
-                    "size": 500,
-                    "order": {
-                        "first_event_occur": "desc"
-                    }
-                },
-                "aggs": {
-                    "first_event_occur": {
-                        "min": {
-                            "field": "@timestamp"
-                        }
-                    }
-                }
-            }
-        }
-    }
+    query = build_run_ids_query(window)
 
     try:
         res = _es.search(index=index, body=query, request_timeout=30)
