@@ -1,6 +1,15 @@
+"""
+OpenSearch Queries
+
+This module contains builder functions for OpenSearch queries used by the MCSpeed dashboard.
+It encapsulates the logic for constructing queries for Terraform, Cloud-init, Puppet, and run ID retrieval.
+"""
 MAX_HOST_NB = 20
 
 def build_terraform_query(run_id):
+    """
+    Build OpenSearch query to retrieve start and end times for Terraform runs.
+    """
     return {
         "size": 0,
         "query": {
@@ -21,6 +30,9 @@ def build_terraform_query(run_id):
     }
 
 def build_cloud_init_query(run_id):
+    """
+    Build OpenSearch query to retrieve start and end times for Cloud-init runs per host.
+    """
     return {
         "size": 0,
         "query": {
@@ -43,6 +55,10 @@ def build_cloud_init_query(run_id):
     }
 
 def build_puppet_query(run_id):
+    """
+    Build OpenSearch query to retrieve Puppet agent execution details, including
+    start/end times and failure logs.
+    """
     return {
         "size": 0,
         "query": {
@@ -94,6 +110,9 @@ def build_puppet_query(run_id):
     }
 
 def build_run_ids_query(window):
+    """
+    Build OpenSearch query to retrieve unique run IDs within a specified time window.
+    """
     return {
         "size": 0,
         "query": {

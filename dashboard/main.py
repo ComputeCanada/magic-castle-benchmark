@@ -1,3 +1,9 @@
+"""
+MCSpeed Dashboard
+
+This Streamlit application visualizes benchmark run data stored in OpenSearch.
+It calculates durations, identifies failures, and provides detailed logs for Terraform, Cloud-init, and Puppet.
+"""
 import argparse
 import datetime
 import logging
@@ -29,6 +35,10 @@ from opensearch_queries import (
 )
 
 def connect_to_opensearch(username, password, host, port, url_prefix=None, headers={}):
+    """
+    Connect to OpenSearch instance with provided credentials.
+    Returns OpenSearch client object or None if connection fails.
+    """
     try:
         return OpenSearch(
             hosts=[{"host": host, "port": port}],
@@ -46,6 +56,10 @@ def connect_to_opensearch(username, password, host, port, url_prefix=None, heade
         return None
 
 def search_start_end(es, index, run_id, program):
+    """
+    Search for start and end timestamps for a specific program in a run.
+    Returns a DataFrame with host, start, end, and errors columns.
+    """
     if program == "terraform":
         body = build_terraform_query(run_id)
     elif program == "cloud-init":
@@ -82,6 +96,10 @@ def search_start_end(es, index, run_id, program):
 
 
 def search_puppet(es, index, run_id):
+    """
+    Search for Puppet agent execution details including duration and failures.
+    Returns a DataFrame with host, start, end, errors, and error_messages columns.
+    """
     body = build_puppet_query(run_id)
     try:
         res = es.search(index=f"{index}", body=body, request_timeout=30)
@@ -131,6 +149,10 @@ def search_puppet(es, index, run_id):
 
 @st.cache_data(ttl="1h")
 def get_run_ids(_es, index, window):
+    """
+    Retrieve unique run IDs from OpenSearch within a specified time window.
+    Returns a list of run IDs.
+    """
     query = build_run_ids_query(window)
 
     try:
@@ -146,6 +168,10 @@ def get_run_ids(_es, index, window):
 
 @st.cache_data(ttl="1d")
 def get_single_run(_es, index, run_id):
+    """
+    Fetch and aggregate data for a single benchmark run (Terraform, Cloud-init, Puppet).
+    Returns a DataFrame containing combined data for the run.
+    """
     terraform_df = search_start_end(_es, f"{index}", run_id, "terraform")
     terraform_df["program"] = "terraform"
     terraform_df["host"] = "terraform"
@@ -163,6 +189,10 @@ def get_single_run(_es, index, run_id):
     return df
 
 def get_all_run(es, index, run_ids):
+    """
+    Fetch and aggregate data for multiple benchmark runs.
+    Calculates total duration and adds a summary 'total' row for each run.
+    """
     dfs = [get_single_run(es, index, run_id) for run_id in run_ids]
     df = pd.concat(dfs)
 
@@ -180,6 +210,10 @@ def get_all_run(es, index, run_ids):
 
 
 def check_failure(df):
+    """
+    Identify failed runs based on errors or missing programs.
+    Returns a list of failed run IDs.
+    """
     result = []
     required_programs = set(["puppet", "cloudinit", "terraform"])
 
@@ -195,6 +229,10 @@ def check_failure(df):
     return result
 
 def draw_dashboard(df):
+    """
+    Render the Streamlit dashboard using the provided DataFrame.
+    Displays charts, statistics, and detailed error logs.
+    """
     if df is None:
         return
 
@@ -327,6 +365,10 @@ def draw_dashboard(df):
                 st.dataframe(puppet_error_table, hide_index=True)
 
 def main(load, save, window):
+    """
+    Main application entry point.
+    Handles data loading/saving, OpenSearch connection, and dashboard rendering.
+    """
     st.header("MCSpeed Dashboard")
 
     username = st.secrets.get("opensearch_username")
