@@ -22,7 +22,10 @@ curl -X PUT \
 '
 
 while IFS= read -r line; do
-  curl -X POST \
+  echo "{\"create\" : {}}"
+  echo "${line}"
+done < <(jq -c "del(.hook) | del(.outputs) | . + { \"run_id\": \"${RUN_ID}\", \"workspace\": \"${TF_WORKSPACE}\", \"program\":\"terraform\" }" /tmp/log) > /tmp/to_elastic-data
+
+curl -X POST \
     -H "CF-Access-Client-Id: ${OPENSEARCH_CF_CLIENT}" -H "CF-Access-Client-Secret: ${OPENSEARCH_CF_SECRET}" -H 'Content-Type: application/json' \
-    -u "${OPENSEARCH_USERNAME}:${OPENSEARCH_PASSWORD}" "${OPENSEARCH_URL}/${OPENSEARCH_INDEX}/_doc" -d "${line}"
-done < <(jq -c "del(.hook) | del(.outputs) | . + { \"run_id\": \"${RUN_ID}\", \"workspace\": \"${TF_WORKSPACE}\", \"program\":\"terraform\" }" /tmp/log)
+    -u "${OPENSEARCH_USERNAME}:${OPENSEARCH_PASSWORD}" "${OPENSEARCH_URL}/${OPENSEARCH_INDEX}/_bulk" --data-binary @/tmp/to_elastic-data
