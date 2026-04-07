@@ -12,9 +12,9 @@ module "openstack" {
   image        = "Rocky-9"
 
   instances = {
-    mgmt  = { type = "4c-8G", tags = ["puppet", "mgmt", "nfs"], count = 1 }
-    login = { type = "4c-8G", tags = ["login", "public", "proxy"], count = 1 }
-    node  = { type = "2c-4G", tags = ["node"], count = 1 }
+    mgmt  = { type = "p4-8gb", tags = ["puppet", "mgmt", "nfs"], count = 1 }
+    login = { type = "p4-8gb", tags = ["login", "public", "proxy"], count = 1 }
+    node  = { type = "p2-4gb", tags = ["node"], count = 1 }
   }
 
   volumes = {
