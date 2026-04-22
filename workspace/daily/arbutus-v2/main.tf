@@ -35,7 +35,6 @@ module "openstack" {
   nb_users = 10
   # Shared password, randomly chosen if blank
   guest_passwd = ""
-  subnet_id = "6db93329-a217-48d4-b427-94bc207acbf8"
 }
 
 output "accounts" {
